@@ -40,15 +40,15 @@
 #define LOG_DEBUGV   9
 
 
-#define EMERGENCY(x, ...) message(LOG_EMERG, x, ##__VA_ARGS__)
-#define ALERT(x, ...)     message(LOG_ALERT, x, ##__VA_ARGS__)
-#define CRITICAL(x, ...)  message(LOG_CRIT, x, ##__VA_ARGS__)
-#define ERROR(x, ...)  message(LOG_ERR, x, ##__VA_ARGS__)
-#define PERROR(x, ...)    message(LOG_ERR, x "      (strerror: %m)\n", ##__VA_ARGS__)
-#define WARNING(x, ...)   message(LOG_WARNING, x, ##__VA_ARGS__)
-#define NOTIFY(x, ...) message(LOG_NOTICE, x, ##__VA_ARGS__)
-#define NOTICE(x, ...)    message(LOG_NOTICE, x, ##__VA_ARGS__)
-#define INFO(x, ...)   message(LOG_INFO, x, ##__VA_ARGS__)
+#define EMERGENCY(x, ...) //message(LOG_EMERG, x, ##__VA_ARGS__)
+#define ALERT(x, ...)     //message(LOG_ALERT, x, ##__VA_ARGS__)
+#define CRITICAL(x, ...)  //message(LOG_CRIT, x, ##__VA_ARGS__)
+#define ERROR(x, ...)  //message(LOG_ERR, x, ##__VA_ARGS__)
+#define PERROR(x, ...)    //message(LOG_ERR, x "      (strerror: %m)\n", ##__VA_ARGS__)
+#define WARNING(x, ...)   //message(LOG_WARNING, x, ##__VA_ARGS__)
+#define NOTIFY(x, ...) //message(LOG_NOTICE, x, ##__VA_ARGS__)
+#define NOTICE(x, ...)    //message(LOG_NOTICE, x, ##__VA_ARGS__)
+#define INFO(x, ...)   //message(LOG_INFO, x, ##__VA_ARGS__)
 
 
 
@@ -330,8 +330,8 @@ void servo_perform_clock_step(RunTimeOpts * rtOpts, PtpClock * ptpClock);
  /**\{*/
 int logToFile(RunTimeOpts * rtOpts);
 int recordToFile(RunTimeOpts * rtOpts);
-PtpClock * ptpdStartup(int,char**,Integer16*,RunTimeOpts*);
-void ptpdShutdown(PtpClock * ptpClock);
+//PtpClock * ptpdStartup(Integer16*,RunTimeOpts*);
+//void ptpdShutdown(PtpClock * ptpClock);
 
 void check_signals(RunTimeOpts * rtOpts, PtpClock * ptpClock);
 

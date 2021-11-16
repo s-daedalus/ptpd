@@ -21,27 +21,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include <math.h>
 #include <errno.h>
 #include <signal.h>
-#include <fcntl.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <limits.h>
-#include <netdb.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#ifndef __APPLE__
-#include <sys/timex.h>
-#endif
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <sys/ioctl.h>
-#include <sys/param.h>
-#include <arpa/inet.h>
 #include <stdarg.h>
-#include <syslog.h>
 #include <limits.h>
 
 #include "constants.h"
@@ -75,6 +61,12 @@
 /* arith.c */
 
 /**
+ * @brief main ptp task for rtos
+ * 
+ */
+void ptp_task(void *args);
+
+/**
  * \brief Convert Integer64 into TimeInternal structure
  */
 void integer64_to_internalTime(Integer64,TimeInternal*);
@@ -92,8 +84,8 @@ void fromInternalTime(TimeInternal*,Timestamp*);
  */
 void toInternalTime(TimeInternal*,Timestamp*);
 
-void ts_to_InternalTime(struct timespec *, TimeInternal *);
-void tv_to_InternalTime(struct timeval  *, TimeInternal *);
+//void ts_to_InternalTime(struct timespec *, TimeInternal *);
+//void tv_to_InternalTime(struct timeval  *, TimeInternal *);
 
 
 
