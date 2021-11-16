@@ -1,6 +1,6 @@
 #ifndef DATATYPES_DEP_H_
 #define DATATYPES_DEP_H_
-
+#include "FreeRTOS_Sockets.h"
 /**
 *\file
 * \brief Implementation specific datatype
@@ -71,7 +71,8 @@ typedef struct {
     Integer32 eventSock, generalSock, multicastAddr, peerMulticastAddr,unicastAddr;
 
     /* used by IGMP refresh */
-    struct in_addr interfaceAddr;
+    
+    struct freertos_sockaddr interfaceAddr;
 
 #ifdef PTP_EXPERIMENTAL
     /* used for Hybrid mode */

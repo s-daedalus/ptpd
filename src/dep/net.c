@@ -51,8 +51,10 @@
  */
 
 #include "../ptpd.h"
+#include "FreeRTOS_IP.h"
 #include "FreeRTOS_Sockets.h"
 #include "FreeRTOS_IGMP.h"
+#include "ptpd_config.h"
 /* choose kernel-level nanoseconds or microseconds resolution on the client-side */
 
 
@@ -71,7 +73,7 @@ netShutdownMulticastIPv4(NetPath * netPath, Integer32 multicastAddr)
 	
 	/* Close General Multicast */
 	imr.imr_multiaddr.sin_addr = multicastAddr;
-	imr.imr_interface.sin_addr = netPath->interfaceAddr.s_addr;
+	imr.imr_interface.sin_addr = netPath->interfaceAddr.sin_addr;
 
 	FreeRTOS_setsockopt(netPath->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_DROP_MEMBERSHIP, 
 		   &imr, sizeof(struct freertos_ip_mreq));
@@ -112,11 +114,11 @@ netShutdown(NetPath * netPath)
 
 	/* Close sockets */
 	if (netPath->eventSock > 0)
-		close(netPath->eventSock);
+	FreeRTOS_closesocket(netPath->eventSock);
 	netPath->eventSock = -1;
 
 	if (netPath->generalSock > 0)
-		close(netPath->generalSock);
+		FreeRTOS_closesocket(netPath->generalSock);
 	netPath->generalSock = -1;
 
 	return TRUE;
@@ -124,37 +126,10 @@ netShutdown(NetPath * netPath)
 
 
 Boolean
-chooseMcastGroup(RunTimeOpts * rtOpts, struct in_addr *netAddr)
+chooseMcastGroup(RunTimeOpts * rtOpts, struct freertos_sockaddr *netAddr)
 {
-
-	char *addrStr;
-
-#ifdef PTP_EXPERIMENTAL
-	switch(rtOpts->mcast_group_Number){
-	case 0:
-		addrStr = DEFAULT_PTP_DOMAIN_ADDRESS;
-		break;
-
-	case 1:
-		addrStr = ALTERNATE_PTP_DOMAIN1_ADDRESS;
-		break;
-	case 2:
-		addrStr = ALTERNATE_PTP_DOMAIN2_ADDRESS;
-		break;
-	case 3:
-		addrStr = ALTERNATE_PTP_DOMAIN3_ADDRESS;
-		break;
-
-	default:
-		ERROR("Unk group %d\n", rtOpts->mcast_group_Number);
-		exit(3);
-		break;
-	}
-#else
-	addrStr = DEFAULT_PTP_DOMAIN_ADDRESS;
-#endif
-
-	if (!inet_aton(addrStr, netAddr)) {
+	netAddr->sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+	if (netAddr->sin_addr == 0) {
 		ERROR("failed to encode multicast address: %s\n", addrStr);
 		return FALSE;
 	}
@@ -166,180 +141,9 @@ chooseMcastGroup(RunTimeOpts * rtOpts, struct in_addr *netAddr)
 UInteger8 
 lookupCommunicationTechnology(UInteger8 communicationTechnology)
 {
-#if defined(linux)
-	switch (communicationTechnology) {
-	case ARPHRD_ETHER:
-	case ARPHRD_EETHER:
-	case ARPHRD_IEEE802:
-		return PTP_ETHER;
-
-	default:
-		break;
-	}
-#endif  /* defined(linux) */
-
 	return PTP_DEFAULT;
 }
 
-
- /* Find the local network interface */
-UInteger32 
-findIface(Octet * ifaceName, UInteger8 * communicationTechnology,
-    Octet * uuid, NetPath * netPath)
-{
-#if defined(linux)
-
-	/* depends on linux specific ioctls (see 'netdevice' man page) */
-	int i, flags;
-	struct ifconf data;
-	struct ifreq device[IFCONF_LENGTH];
-
-	data.ifc_len = sizeof(device);
-	data.ifc_req = device;
-
-	memset(data.ifc_buf, 0, data.ifc_len);
-
-	flags = IFF_UP | IFF_RUNNING | IFF_MULTICAST;
-
-	/* look for an interface if none specified */
-	if (ifaceName[0] != '\0') {
-		i = 0;
-		memcpy(device[i].ifr_name, ifaceName, IFACE_NAME_LENGTH);
-
-		if (ioctl(netPath->eventSock, SIOCGIFHWADDR, &device[i]) < 0)
-			DBGV("failed to get hardware address\n");
-		else if ((*communicationTechnology = 
-			  lookupCommunicationTechnology(
-				  device[i].ifr_hwaddr.sa_family)) 
-			 == PTP_DEFAULT)
-			DBGV("unsupported communication technology (%d)\n", 
-			     *communicationTechnology);
-		else
-			memcpy(uuid, device[i].ifr_hwaddr.sa_data, 
-			       PTP_UUID_LENGTH);
-	} else {
-		/* no iface specified */
-		/* get list of network interfaces */
-		if (ioctl(netPath->eventSock, SIOCGIFCONF, &data) < 0) {
-			PERROR("failed query network interfaces");
-			return 0;
-		}
-		if (data.ifc_len >= sizeof(device))
-			DBG("device list may exceed allocated space\n");
-
-		/* search through interfaces */
-		for (i = 0; i < data.ifc_len / sizeof(device[0]); ++i) {
-			DBGV("%d %s %s\n", i, device[i].ifr_name, 
-			     inet_ntoa(((struct sockaddr_in *)
-					&device[i].ifr_addr)->sin_addr));
-
-			if (ioctl(netPath->eventSock, SIOCGIFFLAGS, 
-				  &device[i]) < 0)
-				DBGV("failed to get device flags\n");
-			else if ((device[i].ifr_flags & flags) != flags)
-				DBGV("does not meet requirements"
-				     "(%08x, %08x)\n", device[i].ifr_flags, 
-				     flags);
-			else if (ioctl(netPath->eventSock, SIOCGIFHWADDR, 
-				       &device[i]) < 0)
-				DBGV("failed to get hardware address\n");
-			else if ((*communicationTechnology = 
-				  lookupCommunicationTechnology(
-					  device[i].ifr_hwaddr.sa_family)) 
-				 == PTP_DEFAULT)
-				DBGV("unsupported communication technology"
-				     "(%d)\n", *communicationTechnology);
-			else {
-				DBGV("found interface (%s)\n", 
-				     device[i].ifr_name);
-				memcpy(uuid, device[i].ifr_hwaddr.sa_data, 
-				       PTP_UUID_LENGTH);
-				memcpy(ifaceName, device[i].ifr_name, 
-				       IFACE_NAME_LENGTH);
-				break;
-			}
-		}
-	}
-
-	if (ifaceName[0] == '\0') {
-		ERROR("failed to find a usable interface\n");
-		return 0;
-	}
-	if (ioctl(netPath->eventSock, SIOCGIFADDR, &device[i]) < 0) {
-		PERROR("failed to get ip address");
-		return 0;
-	}
-	return ((struct sockaddr_in *)&device[i].ifr_addr)->sin_addr.s_addr;
-
-#else /* usually *BSD */
-
-	struct ifaddrs *if_list, *ifv4, *ifh;
-
-	if (getifaddrs(&if_list) < 0) {
-		PERROR("getifaddrs() failed");
-		return FALSE;
-	}
-	/* find an IPv4, multicast, UP interface, right name(if supplied) */
-	for (ifv4 = if_list; ifv4 != NULL; ifv4 = ifv4->ifa_next) {
-		if ((ifv4->ifa_flags & IFF_UP) == 0)
-			continue;
-		if ((ifv4->ifa_flags & IFF_RUNNING) == 0)
-			continue;
-		if ((ifv4->ifa_flags & IFF_LOOPBACK))
-			continue;
-		if ((ifv4->ifa_flags & IFF_MULTICAST) == 0)
-			continue;
-                /* must have IPv4 address */
-		if (ifv4->ifa_addr->sa_family != AF_INET)
-			continue;
-		if (ifaceName[0] && strncmp(ifv4->ifa_name, ifaceName, 
-					    IF_NAMESIZE) != 0)
-			continue;
-		break;
-	}
-
-	if (ifv4 == NULL) {
-		if (ifaceName[0]) {
-			ERROR("interface \"%s\" does not exist,"
-			      "or is not appropriate\n", ifaceName);
-			return FALSE;
-		}
-		ERROR("no suitable interfaces found!");
-		return FALSE;
-	}
-	/* find the AF_LINK info associated with the chosen interface */
-	for (ifh = if_list; ifh != NULL; ifh = ifh->ifa_next) {
-		if (ifh->ifa_addr->sa_family != AF_LINK)
-			continue;
-		if (strncmp(ifv4->ifa_name, ifh->ifa_name, IF_NAMESIZE) == 0)
-			break;
-	}
-
-	if (ifh == NULL) {
-		ERROR("could not get hardware address for interface \"%s\"\n", 
-		      ifv4->ifa_name);
-		return FALSE;
-	}
-	/* check that the interface TYPE is OK */
-	if (((struct sockaddr_dl *)ifh->ifa_addr)->sdl_type != IFT_ETHER) {
-		ERROR("\"%s\" is not an ethernet interface!\n", ifh->ifa_name);
-		return FALSE;
-	}
-	DBG("==> %s %s %s\n", ifv4->ifa_name,
-	    inet_ntoa(((struct sockaddr_in *)ifv4->ifa_addr)->sin_addr),
-	    ether_ntoa((struct ether_addr *)
-		       LLADDR((struct sockaddr_dl *)ifh->ifa_addr))
-	    );
-
-	*communicationTechnology = PTP_ETHER;
-	memcpy(ifaceName, ifh->ifa_name, IFACE_NAME_LENGTH);
-	memcpy(uuid, LLADDR((struct sockaddr_dl *)ifh->ifa_addr), 
-	       PTP_UUID_LENGTH);
-
-	return ((struct sockaddr_in *)ifv4->ifa_addr)->sin_addr.s_addr;
-
-#endif
-}
 
 /**
  * Init the multcast for specific IPv4 address
@@ -352,24 +156,16 @@ findIface(Octet * ifaceName, UInteger8 * communicationTechnology,
 static Boolean
 netInitMulticastIPv4(NetPath * netPath, Integer32 multicastAddr)
 {
-	struct ip_mreq imr;
+	struct freertos_ip_mreq imr;
 
 	/* multicast send only on specified interface */
-	imr.imr_multiaddr.s_addr = multicastAddr;
-	imr.imr_interface.s_addr = netPath->interfaceAddr.s_addr;
-	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_IF, 
-		       &imr.imr_interface.s_addr, sizeof(struct in_addr)) < 0
-	    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_IF, 
-			  &imr.imr_interface.s_addr, sizeof(struct in_addr)) 
-	    < 0) {
-		PERROR("failed to enable multi-cast on the interface");
-		return FALSE;
-	}
+	imr.imr_multiaddr.sin_addr = multicastAddr;
+	imr.imr_interface.sin_addr = netPath->interfaceAddr.sin_addr;
 	/* join multicast group (for receiving) on specified interface */
-	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-		       &imr, sizeof(struct ip_mreq)) < 0
-	    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-			  &imr, sizeof(struct ip_mreq)) < 0) {
+	if (FreeRTOS_setsockopt(netPath->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, 
+		       &imr, sizeof(struct freertos_ip_mreq)) < 0
+	    || FreeRTOS_setsockopt(netPath->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, 
+		       &imr, sizeof(struct freertos_ip_mreq)) < 0) {
 		PERROR("failed to join the multi-cast group");
 		return FALSE;
 	}
@@ -387,28 +183,26 @@ netInitMulticastIPv4(NetPath * netPath, Integer32 multicastAddr)
 Boolean
 netInitMulticast(NetPath * netPath,  RunTimeOpts * rtOpts)
 {
-	struct in_addr netAddr;
+	struct freertos_sockaddr netAddr;
 	char addrStr[NET_ADDRESS_LENGTH];
 	
 	/* Init General multicast IP address */
 	if(!chooseMcastGroup(rtOpts, &netAddr)){
 		return FALSE;
 	}
-	netPath->multicastAddr = netAddr.s_addr;
+	netPath->multicastAddr = netAddr.sin_addr;
 	if(!netInitMulticastIPv4(netPath, netPath->multicastAddr)) {
 		return FALSE;
 	}
 	/* End of General multicast Ip address init */
 
-
 	/* Init Peer multicast IP address */
-	memcpy(addrStr, PEER_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
-
-	if (!inet_aton(addrStr, &netAddr)) {
+	netPath->peerMulticastAddr = FreeRTOS_inet_addr(PEER_PTP_DOMAIN_ADDRESS);
+	if (netPath->peerMulticastAddr == 0) {
 		ERROR("failed to encode multi-cast address: %s\n", addrStr);
 		return FALSE;
 	}
-	netPath->peerMulticastAddr = netAddr.s_addr;
+	
 	if(!netInitMulticastIPv4(netPath, netPath->peerMulticastAddr)) {
 		return FALSE;
 	}
@@ -483,53 +277,40 @@ Boolean
 netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 {
 	int temp;
-	struct in_addr interfaceAddr, netAddr;
-	struct sockaddr_in addr;
+	struct freertos_sockaddr interfaceAddr, netAddr;
+	struct freertos_sockaddr addr;
 
 	DBG("netInit\n");
 
 	/* open sockets */
-	if ((netPath->eventSock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0
-	    || (netPath->generalSock = socket(PF_INET, SOCK_DGRAM, 
-					      IPPROTO_UDP)) < 0) {
+	if ((netPath->eventSock = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_DGRAM, FREERTOS_IPPROTO_UDP)) < 0
+	    || (netPath->generalSock = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_DGRAM, FREERTOS_IPPROTO_UDP)) < 0) {
 		PERROR("failed to initalize sockets");
 		return FALSE;
 	}
 	/* find a network interface */
-	if (!(interfaceAddr.s_addr = 
-	      findIface(rtOpts->ifaceName, 
-			&ptpClock->port_communication_technology,
-			ptpClock->port_uuid_field, netPath)))
-		return FALSE;
-
+	interfaceAddr.sin_addr = FreeRTOS_GetIPAddress();
+	
 	/* save interface address for IGMP refresh */
 	netPath->interfaceAddr = interfaceAddr;
 	
 	DBG("Local IP address used : %s \n", inet_ntoa(interfaceAddr));
-
-	temp = 1;			/* allow address reuse */
-	if (setsockopt(netPath->eventSock, SOL_SOCKET, SO_REUSEADDR, 
-		       &temp, sizeof(int)) < 0
-	    || setsockopt(netPath->generalSock, SOL_SOCKET, SO_REUSEADDR, 
-			  &temp, sizeof(int)) < 0) {
-		DBG("failed to set socket reuse\n");
-	}
 	/* bind sockets */
 	/*
 	 * need INADDR_ANY to allow receipt of multi-cast and uni-cast
 	 * messages
 	 */
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(PTP_EVENT_PORT);
-	if (bind(netPath->eventSock, (struct sockaddr *)&addr, 
-		 sizeof(struct sockaddr_in)) < 0) {
+	addr.sin_family = FREERTOS_AF_INET;
+	addr.sin_addr = 0; // any address
+	addr.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
+	if (FreeRTOS_bind(netPath->eventSock, (struct freertos_sockaddr *)&addr, 
+		 sizeof(struct freertos_sockaddr)) < 0) {
 		PERROR("failed to bind event socket");
 		return FALSE;
 	}
-	addr.sin_port = htons(PTP_GENERAL_PORT);
-	if (bind(netPath->generalSock, (struct sockaddr *)&addr, 
-		 sizeof(struct sockaddr_in)) < 0) {
+	addr.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
+	if (FreeRTOS_bind(netPath->generalSock, (struct freertos_sockaddr *)&addr, 
+		 sizeof(struct freertos_sockaddr)) < 0) {
 		PERROR("failed to bind general socket");
 		return FALSE;
 	}
@@ -562,30 +343,30 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 
 	/* send a uni-cast address if specified (useful for testing) */
-	if (rtOpts->unicastAddress[0]) {
-		/* Attempt a DNS lookup first. */
-		struct hostent *host;
-		host = gethostbyname2(rtOpts->unicastAddress, AF_INET);
-                if (host != NULL) {
-			if (host->h_length != 4) {
-				PERROR("unicast host resolved to non ipv4"
-				       "address");
-				return FALSE;
-			}
-			netPath->unicastAddr = 
-				*(uint32_t *)host->h_addr_list[0];
-		} else {
-			/* Maybe it's a dotted quad. */
-			if (!inet_aton(rtOpts->unicastAddress, &netAddr)) {
-				ERROR("failed to encode uni-cast address: %s\n",
-				      rtOpts->unicastAddress);
-				return FALSE;
-				netPath->unicastAddr = netAddr.s_addr;
-			}
-                }
-	} else {
-                netPath->unicastAddr = 0;
-	}
+//	if (rtOpts->unicastAddress[0]) {
+//		/* Attempt a DNS lookup first. */
+//		struct hostent *host;
+//		host = gethostbyname2(rtOpts->unicastAddress, AF_INET);
+//                if (host != NULL) {
+//			if (host->h_length != 4) {
+//				PERROR("unicast host resolved to non ipv4"
+//				       "address");
+//				return FALSE;
+//			}
+//			netPath->unicastAddr = 
+//				*(uint32_t *)host->h_addr_list[0];
+//		} else {
+//			/* Maybe it's a dotted quad. */
+//			if (!inet_aton(rtOpts->unicastAddress, &netAddr)) {
+//				ERROR("failed to encode uni-cast address: %s\n",
+//				      rtOpts->unicastAddress);
+//				return FALSE;
+//				netPath->unicastAddr = netAddr.s_addr;
+//			}
+//                }
+//	} else {
+//                netPath->unicastAddr = 0;
+//	}
 
 	/* init UDP Multicast on both Default and Pear addresses */
 	if (!netInitMulticast(netPath, rtOpts)) {
@@ -594,26 +375,26 @@ netInit(NetPath * netPath, RunTimeOpts * rtOpts, PtpClock * ptpClock)
 
 	/* set socket time-to-live to 1 */
 
-	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_TTL, 
+	if (FreeRTOS_setsockopt(netPath->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_MULTICAST_TTL, 
 		       &rtOpts->ttl, sizeof(int)) < 0
-	    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_TTL, 
+	    || FreeRTOS_setsockopt(netPath->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_MULTICAST_TTL, 
 			  &rtOpts->ttl, sizeof(int)) < 0) {
 		PERROR("failed to set the multi-cast time-to-live");
 		return FALSE;
 	}
 
 	/* enable loopback */
-	temp = 1;
-
-	DBG("Going to set IP_MULTICAST_LOOP with %d \n", temp);
-
-	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
-		       &temp, sizeof(int)) < 0
-	    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
-			  &temp, sizeof(int)) < 0) {
-		PERROR("failed to enable multi-cast loopback");
-		return FALSE;
-	}
+//	temp = 1;
+//
+//	DBG("Going to set IP_MULTICAST_LOOP with %d \n", temp);
+//
+//	if (setsockopt(netPath->eventSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
+//		       &temp, sizeof(int)) < 0
+//	    || setsockopt(netPath->generalSock, IPPROTO_IP, IP_MULTICAST_LOOP, 
+//			  &temp, sizeof(int)) < 0) {
+//		PERROR("failed to enable multi-cast loopback");
+//		return FALSE;
+//	}
 
 	/* make timestamps available through recvmsg() */
 	if (!netInitTimestamping(netPath)) {
@@ -629,29 +410,29 @@ int
 netSelect(TimeInternal * timeout, NetPath * netPath)
 {
 	int ret, nfds;
-	fd_set readfds;
-	struct timeval tv, *tv_ptr;
+	SocketSet_t readfds;
+	//struct timeval tv, *tv_ptr;
 
 	if (timeout < 0)
 		return FALSE;
+	
+	//FD_ZERO(&readfds);
+	FreeRTOS_FD_SET(netPath->eventSock, &readfds, eSELECT_READ);
+	FreeRTOS_FD_SET(netPath->generalSock, &readfds, eSELECT_READ);
 
-	FD_ZERO(&readfds);
-	FD_SET(netPath->eventSock, &readfds);
-	FD_SET(netPath->generalSock, &readfds);
+//	if (timeout) {
+//		tv.tv_sec = timeout->seconds;
+//		tv.tv_usec = timeout->nanoseconds / 1000;
+//		tv_ptr = &tv;
+//	} else
+//		tv_ptr = 0;
 
-	if (timeout) {
-		tv.tv_sec = timeout->seconds;
-		tv.tv_usec = timeout->nanoseconds / 1000;
-		tv_ptr = &tv;
-	} else
-		tv_ptr = 0;
-
-	if (netPath->eventSock > netPath->generalSock)
-		nfds = netPath->eventSock;
-	else
-		nfds = netPath->generalSock;
-
-	ret = select(nfds + 1, &readfds, 0, 0, tv_ptr) > 0;
+//	if (netPath->eventSock > netPath->generalSock)
+//		nfds = netPath->eventSock;
+//	else
+//		nfds = netPath->generalSock;
+	ret = FreeRTOS_select(readfds, portMAX_DELAY) > 0;
+//	ret = select(nfds + 1, &readfds, 0, 0, tv_ptr) > 0;
 
 	if (ret < 0) {
 		if (errno == EAGAIN || errno == EINTR)
