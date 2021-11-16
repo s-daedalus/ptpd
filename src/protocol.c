@@ -299,14 +299,14 @@ toState(UInteger8 state, RunTimeOpts *rtOpts, PtpClock *ptpClock)
 		 * if the flags have disappeared but we're past 
 		 * leap second event, do nothing - kernel flags 
 		 * will be unset in handleAnnounce()
-		 */
+		
 		if((!ptpClock->leap59 && !ptpClock->leap61) &&
 		    !ptpClock->leapSecondInProgress &&
 		   (checkTimexFlags(STA_INS) || checkTimexFlags(STA_DEL))) {
 			WARNING("=== Leap second pending in kernel but not on "
 				"GM: aborting kernel leap second\n");
 			unsetTimexFlags(STA_INS | STA_DEL, TRUE);
-		}
+		} */
 #endif /* apple */
 		break;
 	default:
@@ -464,14 +464,14 @@ doState(RunTimeOpts *rtOpts, PtpClock *ptpClock)
 				    "clock and offset updates\n");
                             ptpClock->leapSecondInProgress = TRUE;
 #if !defined(__APPLE__)
-                            if(!checkTimexFlags(ptpClock->leap61 ? 
+                            /*if(!checkTimexFlags(ptpClock->leap61 ? 
 						STA_INS : STA_DEL)) {
                                     WARNING("=== Kernel leap second flags have "
 					    "been unset - attempting to set "
 					    "again");
                                     setTimexFlags(ptpClock->leap61 ? 
 						  STA_INS : STA_DEL, FALSE);
-                            }
+                            }*/
 #endif /* apple */
 			    /*
 			     * start pause timer from now until [pause] after
@@ -786,7 +786,7 @@ handleAnnounce(MsgHeader *header, Octet *msgIbuf, ssize_t length,
 					ptpClock->leapSecondInProgress=FALSE;
 					ptpClock->leap59 = FALSE;
 					ptpClock->leap61 = FALSE;
-					unsetTimexFlags(STA_INS | STA_DEL, TRUE);
+					//unsetTimexFlags(STA_INS | STA_DEL, TRUE);
 				}
 			}
 			DBG2("___ Announce: received Announce from current Master, so reset the Announce timer\n");

@@ -259,7 +259,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, RunTimeOpts 
 			ptpClock->leapSecondInProgress = FALSE;
 			timerStop(LEAP_SECOND_PAUSE_TIMER, ptpClock->itimer);
 #if !defined(__APPLE__)
-			unsetTimexFlags(STA_INS | STA_DEL,TRUE);
+			//unsetTimexFlags(STA_INS | STA_DEL,TRUE);
 #endif /* apple */
 		}
 
@@ -273,7 +273,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, RunTimeOpts 
 		    ((!previousLeap59 && ptpClock->leap59) ||
 		    (!previousLeap61 && ptpClock->leap61)))) {
 #if !defined(__APPLE__)
-			WARNING("=== Leap second pending! Setting kernel to %s "
+			/*WARNING("=== Leap second pending! Setting kernel to %s "
 				"one second at midnight\n",
 				ptpClock->leap61 ? "add" : "delete");
 		    if (!checkTimexFlags(ptpClock->leap61 ? STA_INS : STA_DEL)) {
@@ -281,7 +281,7 @@ void s1(MsgHeader *header,MsgAnnounce *announce,PtpClock *ptpClock, RunTimeOpts 
 					    TRUE);
 			    setTimexFlags(ptpClock->leap61 ? STA_INS : STA_DEL,
 					  FALSE);
-		    }
+		    }*/
 #else
 			WARNING("=== Leap second pending! No kernel leap second "
 				"API support - expect a clock jump at "
