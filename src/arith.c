@@ -130,21 +130,21 @@ toInternalTime(TimeInternal * internal, Timestamp * external)
 	}
 }
 
-void 
+/*void 
 ts_to_InternalTime(struct timespec *a,  TimeInternal * b)
 {
 
 	b->seconds = a->tv_sec;
 	b->nanoseconds = a->tv_nsec;
-}
+}*/
 
-void 
+/*void 
 tv_to_InternalTime(struct timeval *a,  TimeInternal * b)
 {
 
 	b->seconds = a->tv_sec;
 	b->nanoseconds = a->tv_usec * 1000;
-}
+}*/
 
 
 void 
