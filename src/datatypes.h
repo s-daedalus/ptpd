@@ -2,6 +2,7 @@
 #define DATATYPES_H_
 
 #include <stdio.h> 
+#include "ptpd_config.h"
 
 /*Struct defined in spec*/
 
