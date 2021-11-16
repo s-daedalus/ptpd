@@ -51,11 +51,10 @@
  */
 
 #include "../ptpd.h"
-
+#include "FreeRTOS_Sockets.h"
+#include "FreeRTOS_IGMP.h"
 /* choose kernel-level nanoseconds or microseconds resolution on the client-side */
-#if !defined(SO_TIMESTAMPNS) && !defined(SO_TIMESTAMP) && !defined(SO_BINTIME)
-#error kernel-level timestamps not detected
-#endif
+
 
 /**
  * shutdown the IPv4 multicast for specific address
@@ -68,16 +67,16 @@
 static Boolean
 netShutdownMulticastIPv4(NetPath * netPath, Integer32 multicastAddr)
 {
-	struct ip_mreq imr;
-
+	struct freertos_ip_mreq imr;
+	
 	/* Close General Multicast */
-	imr.imr_multiaddr.s_addr = multicastAddr;
-	imr.imr_interface.s_addr = netPath->interfaceAddr.s_addr;
+	imr.imr_multiaddr.sin_addr = multicastAddr;
+	imr.imr_interface.sin_addr = netPath->interfaceAddr.s_addr;
 
-	setsockopt(netPath->eventSock, IPPROTO_IP, IP_DROP_MEMBERSHIP, 
-		   &imr, sizeof(struct ip_mreq));
-	setsockopt(netPath->generalSock, IPPROTO_IP, IP_DROP_MEMBERSHIP, 
-		   &imr, sizeof(struct ip_mreq));
+	FreeRTOS_setsockopt(netPath->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_DROP_MEMBERSHIP, 
+		   &imr, sizeof(struct freertos_ip_mreq));
+	FreeRTOS_setsockopt(netPath->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_DROP_MEMBERSHIP, 
+		   &imr, sizeof(struct freertos_ip_mreq));
 	
 	return TRUE;
 }
