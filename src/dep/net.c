@@ -55,6 +55,7 @@
 #include "FreeRTOS_Sockets.h"
 #include "FreeRTOS_IGMP.h"
 #include "ptpd_config.h"
+#include "ptp_timestamps.h"
 /* choose kernel-level nanoseconds or microseconds resolution on the client-side */
 
 
@@ -464,118 +465,121 @@ ssize_t
 netRecvEvent(Octet * buf, TimeInternal * time, NetPath * netPath)
 {
 	ssize_t ret;
-	struct msghdr msg;
-	struct iovec vec[1];
-	struct sockaddr_in from_addr;
+//	struct msghdr msg;
+//	struct iovec vec[1];
+	struct freertos_sockaddr from_addr;
 
-	union {
-		struct cmsghdr cm;
-		char	control[CMSG_SPACE(sizeof(struct timeval))];
-	}     cmsg_un;
+	//union {
+//		struct cmsghdr cm;
+//		char	control[CMSG_SPACE(sizeof(struct timeval))];
+//	}     cmsg_un;
 
-	struct cmsghdr *cmsg;
+//	struct cmsghdr *cmsg;
 
-#if defined(SO_TIMESTAMPNS)
-	struct timespec * ts;
-#elif defined(SO_BINTIME)
-	struct bintime * bt;
-	struct timespec ts;
-#endif
-	
-#if defined(SO_TIMESTAMP)
-	struct timeval * tv;
-#endif
+//#if defined(SO_TIMESTAMPNS)
+//	struct timespec * ts;
+//#elif defined(SO_BINTIME)
+//	struct bintime * bt;
+//	struct timespec ts;
+//#endif
+//	
+//#if defined(SO_TIMESTAMP)
+//	struct timeval * tv;
+//#endif
 	Boolean timestampValid = FALSE;
+	// read the message from the socket and get the corresponding timestamp
+	// ####### call CODE TO GET PTP TIMESTAMP HERE#
+	ret = FreeRTOS_recvfrom(netPath->eventSock, buf, PACKET_SIZE,0, &from_addr, sizeof(struct freertos_sockaddr));
+	timestampValid = retrieve_timestamp(time);
+	//vec[0].iov_base = buf;
+	//vec[0].iov_len = PACKET_SIZE;
+//
+	//memset(&msg, 0, sizeof(msg));
+	//memset(&from_addr, 0, sizeof(from_addr));
+	//memset(buf, 0, PACKET_SIZE);
+	//memset(&cmsg_un, 0, sizeof(cmsg_un));
+//
+	//msg.msg_name = (caddr_t)&from_addr;
+	//msg.msg_namelen = sizeof(from_addr);
+	//msg.msg_iov = vec;
+	//msg.msg_iovlen = 1;
+	//msg.msg_control = cmsg_un.control;
+	//msg.msg_controllen = sizeof(cmsg_un.control);
+	//msg.msg_flags = 0;
+//
+	//ret = recvmsg(netPath->eventSock, &msg, MSG_DONTWAIT);
 
-
-	vec[0].iov_base = buf;
-	vec[0].iov_len = PACKET_SIZE;
-
-	memset(&msg, 0, sizeof(msg));
-	memset(&from_addr, 0, sizeof(from_addr));
-	memset(buf, 0, PACKET_SIZE);
-	memset(&cmsg_un, 0, sizeof(cmsg_un));
-
-	msg.msg_name = (caddr_t)&from_addr;
-	msg.msg_namelen = sizeof(from_addr);
-	msg.msg_iov = vec;
-	msg.msg_iovlen = 1;
-	msg.msg_control = cmsg_un.control;
-	msg.msg_controllen = sizeof(cmsg_un.control);
-	msg.msg_flags = 0;
-
-	ret = recvmsg(netPath->eventSock, &msg, MSG_DONTWAIT);
-	if (ret <= 0) {
-		if (errno == EAGAIN || errno == EINTR)
-			return 0;
-
-		return ret;
-	}
-	if (msg.msg_flags & MSG_TRUNC) {
-		ERROR("received truncated message\n");
-		return 0;
-	}
-	/* get time stamp of packet */
-	if (!time) {
-		ERROR("null receive time stamp argument\n");
-		return 0;
-	}
-	if (msg.msg_flags & MSG_CTRUNC) {
-		ERROR("received truncated ancillary data\n");
-		return 0;
-	}
-#ifdef PTP_EXPERIMENTAL
-	netPath->lastRecvAddr = from_addr.sin_addr.s_addr;
-#endif
-
-
-
-	if (msg.msg_controllen <= 0) {
-		ERROR("received short ancillary data (%ld/%ld)\n",
-		    (long)msg.msg_controllen, (long)sizeof(cmsg_un.control));
-
-		return 0;
-	}
-
-	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
-	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-		if (cmsg->cmsg_level == SOL_SOCKET) {
-#if defined(SO_TIMESTAMPNS)
-			if(cmsg->cmsg_type == SCM_TIMESTAMPNS) {
-				ts = (struct timespec *)CMSG_DATA(cmsg);
-				time->seconds = ts->tv_sec;
-				time->nanoseconds = ts->tv_nsec;
-				timestampValid = TRUE;
-				DBGV("kernel NANO recv time stamp %us %dns\n", 
-				     time->seconds, time->nanoseconds);
-				break;
-			}
-#elif defined(SO_BINTIME)
-			if(cmsg->cmsg_type == SCM_BINTIME) {
-				bt = (struct bintime *)CMSG_DATA(cmsg);
-				bintime2timespec(bt, &ts);
-				time->seconds = ts.tv_sec;
-				time->nanoseconds = ts.tv_nsec;
-				timestampValid = TRUE;
-				DBGV("kernel NANO recv time stamp %us %dns\n",
-				     time->seconds, time->nanoseconds);
-				break;
-			}
-#endif
-			
-#if defined(SO_TIMESTAMP)
-			if(cmsg->cmsg_type == SCM_TIMESTAMP) {
-				tv = (struct timeval *)CMSG_DATA(cmsg);
-				time->seconds = tv->tv_sec;
-				time->nanoseconds = tv->tv_usec * 1000;
-				timestampValid = TRUE;
-				DBGV("kernel MICRO recv time stamp %us %dns\n",
-				     time->seconds, time->nanoseconds);
-			}
-#endif
-		}
-	}
-
+//	if (ret <= 0) {
+//		if (errno == EAGAIN || errno == EINTR)
+//			return 0;
+//
+//		return ret;
+//	}
+//	if (msg.msg_flags & MSG_TRUNC) {
+//		ERROR("received truncated message\n");
+//		return 0;
+//	}
+//	/* get time stamp of packet */
+//	if (!time) {
+//		ERROR("null receive time stamp argument\n");
+//		return 0;
+//	}
+//	if (msg.msg_flags & MSG_CTRUNC) {
+//		ERROR("received truncated ancillary data\n");
+//		return 0;
+//	}
+//#ifdef PTP_EXPERIMENTAL
+//	netPath->lastRecvAddr = from_addr.sin_addr.s_addr;
+//#endif
+//
+//
+//
+//	if (msg.msg_controllen <= 0) {
+//		ERROR("received short ancillary data (%ld/%ld)\n",
+//		    (long)msg.msg_controllen, (long)sizeof(cmsg_un.control));
+//
+//		return 0;
+//	}
+//
+//	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+//	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+//		if (cmsg->cmsg_level == SOL_SOCKET) {
+//#if defined(SO_TIMESTAMPNS)
+//			if(cmsg->cmsg_type == SCM_TIMESTAMPNS) {
+//				ts = (struct timespec *)CMSG_DATA(cmsg);
+//				time->seconds = ts->tv_sec;
+//				time->nanoseconds = ts->tv_nsec;
+//				timestampValid = TRUE;
+//				DBGV("kernel NANO recv time stamp %us %dns\n", 
+//				     time->seconds, time->nanoseconds);
+//				break;
+//			}
+//#elif defined(SO_BINTIME)
+//			if(cmsg->cmsg_type == SCM_BINTIME) {
+//				bt = (struct bintime *)CMSG_DATA(cmsg);
+//				bintime2timespec(bt, &ts);
+//				time->seconds = ts.tv_sec;
+//				time->nanoseconds = ts.tv_nsec;
+//				timestampValid = TRUE;
+//				DBGV("kernel NANO recv time stamp %us %dns\n",
+//				     time->seconds, time->nanoseconds);
+//				break;
+//			}
+//#endif
+//			
+//#if defined(SO_TIMESTAMP)
+//			if(cmsg->cmsg_type == SCM_TIMESTAMP) {
+//				tv = (struct timeval *)CMSG_DATA(cmsg);
+//				time->seconds = tv->tv_sec;
+//				time->nanoseconds = tv->tv_usec * 1000;
+//				timestampValid = TRUE;
+//				DBGV("kernel MICRO recv time stamp %us %dns\n",
+//				     time->seconds, time->nanoseconds);
+//			}
+//#endif
+//		}
+//	}
+//
 	if (!timestampValid) {
 		/*
 		 * do not try to get by with recording the time here, better
@@ -608,120 +612,121 @@ ssize_t
 netRecvGeneral(Octet * buf, TimeInternal * time, NetPath * netPath)
 {
 	ssize_t ret;
-	struct msghdr msg;
-	struct iovec vec[1];
-	struct sockaddr_in from_addr;
+	//struct msghdr msg;
+	//struct iovec vec[1];
+	struct freertos_sockaddr from_addr;
 	
-	union {
-		struct cmsghdr cm;
-		char	control[CMSG_SPACE(sizeof(struct timeval))];
-	}     cmsg_un;
-	
-	struct cmsghdr *cmsg;
-	
-#if defined(SO_TIMESTAMPNS)
-	struct timespec * ts;
-#elif defined(SO_BINTIME)
-	struct bintime * bt;
-	struct timespec ts;
-#endif
-	
-#if defined(SO_TIMESTAMP)
-	struct timeval * tv;
-#endif
+//	union {
+//		struct cmsghdr cm;
+//		char	control[CMSG_SPACE(sizeof(struct timeval))];
+//	}     cmsg_un;
+//	
+//	struct cmsghdr *cmsg;
+//	
+//#if defined(SO_TIMESTAMPNS)
+//	struct timespec * ts;
+//#elif defined(SO_BINTIME)
+//	struct bintime * bt;
+//	struct timespec ts;
+//#endif
+//	
+//#if defined(SO_TIMESTAMP)
+//	struct timeval * tv;
+//#endif
 	Boolean timestampValid = FALSE;
+	ret = FreeRTOS_recvfrom(netPath->generalSock, buf, PACKET_SIZE,0, &from_addr, sizeof(struct freertos_sockaddr));
+	timestampValid = retrieve_timestamp(time);
 	
 	
-	
-	vec[0].iov_base = buf;
-	vec[0].iov_len = PACKET_SIZE;
-	
-	memset(&msg, 0, sizeof(msg));
-	memset(&from_addr, 0, sizeof(from_addr));
-	memset(buf, 0, PACKET_SIZE);
-	memset(&cmsg_un, 0, sizeof(cmsg_un));
-	
-	msg.msg_name = (caddr_t)&from_addr;
-	msg.msg_namelen = sizeof(from_addr);
-	msg.msg_iov = vec;
-	msg.msg_iovlen = 1;
-	msg.msg_control = cmsg_un.control;
-	msg.msg_controllen = sizeof(cmsg_un.control);
-	msg.msg_flags = 0;
-	
-	ret = recvmsg(netPath->generalSock, &msg, MSG_DONTWAIT);
-	if (ret <= 0) {
-		if (errno == EAGAIN || errno == EINTR)
-			return 0;
-		
-		return ret;
-	}
-	if (msg.msg_flags & MSG_TRUNC) {
-		ERROR("received truncated message\n");
-		return 0;
-	}
-	/* get time stamp of packet */
-	if (!time) {
-		ERROR("null receive time stamp argument\n");
-		return 0;
-	}
-	if (msg.msg_flags & MSG_CTRUNC) {
-		ERROR("received truncated ancillary data\n");
-		return 0;
-	}
-
-#ifdef PTP_EXPERIMENTAL
-	netPath->lastRecvAddr = from_addr.sin_addr.s_addr;
-#endif
-	
-	
-	
-	if (msg.msg_controllen <= 0) {
-		ERROR("received short ancillary data (%ld/%ld)\n",
-		      (long)msg.msg_controllen, (long)sizeof(cmsg_un.control));
-		
-		return 0;
-	}
-	
-	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
-	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-		if (cmsg->cmsg_level == SOL_SOCKET) {
-#if defined(SO_TIMESTAMPNS)
-			if(cmsg->cmsg_type == SCM_TIMESTAMPNS) {
-				ts = (struct timespec *)CMSG_DATA(cmsg);
-				time->seconds = ts->tv_sec;
-				time->nanoseconds = ts->tv_nsec;
-				timestampValid = TRUE;
-				DBGV("kernel NANO recv time stamp %us %dns\n", 
-				     time->seconds, time->nanoseconds);
-				break;
-			}
-#elif defined(SO_BINTIME)
-			if(cmsg->cmsg_type == SCM_BINTIME) {
-				bt = (struct bintime *)CMSG_DATA(cmsg);
-				bintime2timespec(bt, &ts);
-				time->seconds = ts.tv_sec;
-				time->nanoseconds = ts.tv_nsec;
-				timestampValid = TRUE;
-				DBGV("kernel NANO recv time stamp %us %dns\n",
-				     time->seconds, time->nanoseconds);
-				break;
-			}
-#endif
-			
-#if defined(SO_TIMESTAMP)
-			if(cmsg->cmsg_type == SCM_TIMESTAMP) {
-				tv = (struct timeval *)CMSG_DATA(cmsg);
-				time->seconds = tv->tv_sec;
-				time->nanoseconds = tv->tv_usec * 1000;
-				timestampValid = TRUE;
-				DBGV("kernel MICRO recv time stamp %us %dns\n",
-				     time->seconds, time->nanoseconds);
-			}
-#endif
-		}
-	}
-
+//	vec[0].iov_base = buf;
+//	vec[0].iov_len = PACKET_SIZE;
+//	
+//	memset(&msg, 0, sizeof(msg));
+//	memset(&from_addr, 0, sizeof(from_addr));
+//	memset(buf, 0, PACKET_SIZE);
+//	memset(&cmsg_un, 0, sizeof(cmsg_un));
+//	
+//	msg.msg_name = (caddr_t)&from_addr;
+//	msg.msg_namelen = sizeof(from_addr);
+//	msg.msg_iov = vec;
+//	msg.msg_iovlen = 1;
+//	msg.msg_control = cmsg_un.control;
+//	msg.msg_controllen = sizeof(cmsg_un.control);
+//	msg.msg_flags = 0;
+//	
+//	ret = recvmsg(netPath->generalSock, &msg, MSG_DONTWAIT);
+//	if (ret <= 0) {
+//		if (errno == EAGAIN || errno == EINTR)
+//			return 0;
+//		
+//		return ret;
+//	}
+//	if (msg.msg_flags & MSG_TRUNC) {
+//		ERROR("received truncated message\n");
+//		return 0;
+//	}
+//	/* get time stamp of packet */
+//	if (!time) {
+//		ERROR("null receive time stamp argument\n");
+//		return 0;
+//	}
+//	if (msg.msg_flags & MSG_CTRUNC) {
+//		ERROR("received truncated ancillary data\n");
+//		return 0;
+//	}
+//
+//#ifdef PTP_EXPERIMENTAL
+//	netPath->lastRecvAddr = from_addr.sin_addr.s_addr;
+//#endif
+//	
+//	
+//	
+//	if (msg.msg_controllen <= 0) {
+//		ERROR("received short ancillary data (%ld/%ld)\n",
+//		      (long)msg.msg_controllen, (long)sizeof(cmsg_un.control));
+//		
+//		return 0;
+//	}
+//	
+//	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+//	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+//		if (cmsg->cmsg_level == SOL_SOCKET) {
+//#if defined(SO_TIMESTAMPNS)
+//			if(cmsg->cmsg_type == SCM_TIMESTAMPNS) {
+//				ts = (struct timespec *)CMSG_DATA(cmsg);
+//				time->seconds = ts->tv_sec;
+//				time->nanoseconds = ts->tv_nsec;
+//				timestampValid = TRUE;
+//				DBGV("kernel NANO recv time stamp %us %dns\n", 
+//				     time->seconds, time->nanoseconds);
+//				break;
+//			}
+//#elif defined(SO_BINTIME)
+//			if(cmsg->cmsg_type == SCM_BINTIME) {
+//				bt = (struct bintime *)CMSG_DATA(cmsg);
+//				bintime2timespec(bt, &ts);
+//				time->seconds = ts.tv_sec;
+//				time->nanoseconds = ts.tv_nsec;
+//				timestampValid = TRUE;
+//				DBGV("kernel NANO recv time stamp %us %dns\n",
+//				     time->seconds, time->nanoseconds);
+//				break;
+//			}
+//#endif
+//			
+//#if defined(SO_TIMESTAMP)
+//			if(cmsg->cmsg_type == SCM_TIMESTAMP) {
+//				tv = (struct timeval *)CMSG_DATA(cmsg);
+//				time->seconds = tv->tv_sec;
+//				time->nanoseconds = tv->tv_usec * 1000;
+//				timestampValid = TRUE;
+//				DBGV("kernel MICRO recv time stamp %us %dns\n",
+//				     time->seconds, time->nanoseconds);
+//			}
+//#endif
+//		}
+//	}
+//
 	if (!timestampValid) {
 		/*
 		 * do not try to get by with recording the time here, better
@@ -745,7 +750,7 @@ netRecvGeneral(Octet * buf, TimeInternal * time, NetPath * netPath)
 //   if filled, send to this unicast dest;
 //   if zero, do the normal operation (send to unicast with -u, or send to the multcast group)
 //
-///
+///	TODO: (freeRTOS port) we do not use multicast loopback(? at least the sockopt is not set) so we have to make sure the transmit ts get handled correctly
 /// TODO: merge these 2 functions into one
 ///
 ssize_t 
