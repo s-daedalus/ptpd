@@ -68,9 +68,10 @@ RunTimeOpts rtOpts;			/* statically allocated run-time
  */
 PtpClock *G_ptpClock = NULL;
 
-int
-main(int argc, char **argv)
+void ptp_task(void *args)
 {
+	(void) args;
+	
 	PtpClock *ptpClock;
 	Integer16 ret;
 
@@ -135,10 +136,11 @@ main(int argc, char **argv)
 
 	rtOpts.initial_delayreq = DEFAULT_DELAYREQ_INTERVAL;
 	rtOpts.subsequent_delayreq = DEFAULT_DELAYREQ_INTERVAL;      // this will be updated if -g is given
+	
 
 	/* Initialize run time options with command line arguments */
-	if (!(ptpClock = ptpdStartup(argc, argv, &ret, &rtOpts)))
-		return ret;
+	//if (!(ptpClock = ptpdStartup(argc, argv, &ret, &rtOpts)))
+	//	return ret;
 
 	/* global variable for message(), please see comment on top of this file */
 	G_ptpClock = ptpClock;
@@ -149,7 +151,7 @@ main(int argc, char **argv)
 
 	ptpdShutdown(ptpClock);
 
-	NOTIFY("self shutdown, probably due to an error\n");
+	//NOTIFY("self shutdown, probably due to an error\n");
 
 	return 1;
 }
