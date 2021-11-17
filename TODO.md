@@ -10,6 +10,8 @@
 
 # Notes / ToDos when it finally compiles
 - check if rtOpts in ptp_task() get fully initialized.
+- check if we receive our own multicast, and check if tx timestamp processing is working
+- refactoring to one task per socket and no select() call (event / management)
 
 # simplyfied execution order
 - main
