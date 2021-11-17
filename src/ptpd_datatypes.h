@@ -3,8 +3,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "cmsis_os2.h"
-#include "lwip/api.h"
+//#include "cmsis_os2.h"
+//#include "lwip/api.h"
+#include "FreeRTOS.h"
+#include "FreeRTOS_Sockets.h"
 #include "ptpd_constants.h"
 
 #ifdef __cplusplus
@@ -55,14 +57,14 @@ typedef struct
   int32_t n;
 } Filter;
 
-// Network buffer queue.
-typedef struct
-{
-  void *pbuf[PBUF_QUEUE_SIZE];
-  int16_t head;
-  int16_t tail;
-  sys_mutex_t mutex;
-} BufQueue;
+// Network buffer queue. replace with freertos queue
+//typedef struct
+//{
+//  void *pbuf[PBUF_QUEUE_SIZE];
+//  int16_t head;
+//  int16_t tail;
+//  sys_mutex_t mutex;
+//} BufQueue;
 
 // Struct used to store network data.
 typedef struct
@@ -70,12 +72,10 @@ typedef struct
   int32_t unicastAddr;
   int32_t multicastAddr;
   int32_t peerMulticastAddr;
-
-  struct udp_pcb *eventPcb;
-  struct udp_pcb *generalPcb;
-
-  BufQueue eventQ;
-  BufQueue generalQ;
+  QueueHandle_t eventQ;
+  QueueHandle_t generalQ;
+  Socket_t eventSock;
+  Socket_t generalSock;
 } NetPath;
 
 // Define compiler specific symbols.

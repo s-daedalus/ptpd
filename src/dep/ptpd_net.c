@@ -1,273 +1,131 @@
 #include <string.h>
-#include "lwip/inet.h"
-#include "lwip/udp.h"
-#include "lwip/igmp.h"
-#include "syslog.h"
+#include "FreeRTOS.h"
+#include "FreeRTOS_IP.h"
+#include "FreeRTOS_Sockets.h"
+#include "FreeRTOS_IGMP.h"
 #include "ptpd.h"
-#include "ethernetif.h"
 
-#if LWIP_PTPD
 
-// Initialize the network queue.
-static void ptpd_net_queue_init(BufQueue *queue)
+#if FREERTOS_PTPD
+#define PTPD_QUEUE_SIZE (1)
+static uint8_t event_pbuf[PACKET_SIZE];
+static uint8_t general_pbuf[PACKET_SIZE];
+static TaskHandle_t event_tsk_handle;
+static TaskHandle_t general_tsk_handle;
+static QueueSetHandle_t queueSet;
+static void ptpd_net_event_task(void *args)
 {
-  queue->head = 0;
-  queue->tail = 0;
-  sys_mutex_new(&queue->mutex);
-}
 
-// Put data to the network queue.
-static bool ptpd_net_queue_put(BufQueue *queue, void *pbuf)
-{
-  bool retval = false;
-
-  sys_mutex_lock(&queue->mutex);
-
-  // Is there room on the queue for the buffer?
-  if (((queue->head + 1) & PBUF_QUEUE_MASK) != queue->tail)
-  {
-    // Place the buffer in the queue.
-    queue->head = (queue->head + 1) & PBUF_QUEUE_MASK;
-    queue->pbuf[queue->head] = pbuf;
-    retval = true;
-  }
-
-  sys_mutex_unlock(&queue->mutex);
-
-  return retval;
-}
-
-// Get data from the network queue.
-static void *ptpd_net_queue_get(BufQueue *queue)
-{
-  void *pbuf = NULL;
-
-  sys_mutex_lock(&queue->mutex);
-
-  // Is there a buffer on the queue?
-  if (queue->tail != queue->head)
-  {
-    // Get the buffer from the queue.
-    queue->tail = (queue->tail + 1) & PBUF_QUEUE_MASK;
-    pbuf = queue->pbuf[queue->tail];
-  }
-
-  sys_mutex_unlock(&queue->mutex);
-
-  return pbuf;
-}
-
-// Free any remaining pbufs in the queue.
-static void ptpd_net_queue_empty(BufQueue *queue)
-{
-  sys_mutex_lock(&queue->mutex);
-
-  // Free each remaining buffer in the queue.
-  while (queue->tail != queue->head)
-  {
-    // Get the buffer from the queue.
-    queue->tail = (queue->tail + 1) & PBUF_QUEUE_MASK;
-    pbuf_free(queue->pbuf[queue->tail]);
-  }
-  
-  sys_mutex_unlock(&queue->mutex);
-}
-
-// Return true if something is in the queue.
-static bool ptpd_net_queue_check(BufQueue  *queue)
-{
-  bool  retval = false;
-
-  sys_mutex_lock(&queue->mutex);
-
-  if (queue->tail != queue->head) retval = true;
-
-  sys_mutex_unlock(&queue->mutex);
-
-  return retval;
-}
-
-// Find interface to be used. uuid will be filled with MAC address of the interface.
-// The IPv4 address of the interface will be returned.
-static int32_t ptpd_find_iface(const octet_t *ifaceName, octet_t *uuid, NetPath *net_path)
-{
-  struct netif *iface;
-
-  // Use the default interface.
-  iface = netif_default;
-
-  // Copy the interface hardware address.
-  memcpy(uuid, iface->hwaddr, iface->hwaddr_len);
-
-  // Return the interface IP address.
-  return iface->ip_addr.addr;
-}
-
-// Process an incoming message on the event port.
-static void ptpd_net_event_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                                    const ip_addr_t *addr, u16_t port)
-{
-  NetPath *net_path = (NetPath *) arg;
-
-  // Place the incoming message on the event port queue.
-  if (ptpd_net_queue_put(&net_path->eventQ, p))
-  {
-    // Alert the PTP thread there is now something to do.
-    ptpd_alert();
-  }
-  else
-  {
-    pbuf_free(p);
-    syslog_printf(SYSLOG_ERROR, "PTPD: event port queue full");
-    ERROR("PTPD: event port queue full\n");
+  NetPath * net_path = (NetPath*) args;
+  struct freertos_sockaddr sender;
+  for(;;){
+    // block on recvfrom call
+    int result = FreeRTOS_recvfrom(net_path->eventSock, event_pbuf, PACKET_SIZE, 0, &sender, sizeof(struct freertos_sockaddr));
+    if (result){
+      // receive from event socket, enqueue received packet
+      result = xQueueSendToBack(net_path->eventQ, event_pbuf, portMAX_DELAY);
+    }
   }
 }
 
-// Process an incoming message on the general port.
-static void ptpd_net_general_callback(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                                      const ip_addr_t *addr, u16_t port)
+static void ptpd_net_general_task(void *args)
 {
-  NetPath *net_path = (NetPath *) arg;
-
-  // Place the incoming message on the event port queue.
-  if (ptpd_net_queue_put(&net_path->generalQ, p))
-  {
-    // Alert the PTP thread there is now something to do.
-    ptpd_alert();
-  }
-  else
-  {
-    pbuf_free(p);
-    syslog_printf(SYSLOG_ERROR, "PTPD: general port queue full");
-    ERROR("PTPD: general port queue full\n");
+  NetPath * net_path = (NetPath*) args;
+  struct freertos_sockaddr sender;
+  for(;;){
+    // block on recvfrom call
+    int result = FreeRTOS_recvfrom(net_path->generalSock, event_pbuf, PACKET_SIZE, 0, &sender, sizeof(struct freertos_sockaddr));
+    if (result){
+      // receive from event socket, enqueue received packet
+      result = xQueueSendToBack(net_path->generalQ, event_pbuf, portMAX_DELAY);
+    }
   }
 }
 
 // Start all of the UDP stuff.
 bool ptpd_net_init(NetPath *net_path, PtpClock *ptp_clock)
 {
-  in_addr_t net_addr;
-  ip_addr_t interface_addr;
-  char addr_str[NET_ADDRESS_LENGTH];
-
-  // Initialize the buffer queues.
-  ptpd_net_queue_init(&net_path->eventQ);
-  ptpd_net_queue_init(&net_path->generalQ);
-
-  // Find a network interface.
-  interface_addr.addr = ptpd_find_iface(ptp_clock->rtOpts.ifaceName, ptp_clock->portUuidField, net_path);
-  if (!(interface_addr.addr))
-  {
-    syslog_printf(SYSLOG_CRITICAL, "PTPD: failed to find interface address");
-    ERROR("PTPD: Failed to find interface address\n");
-    goto fail01;
-  }
-
+  net_path->eventQ = xQueueCreate(PTPD_QUEUE_SIZE, PACKET_SIZE);
+  net_path->generalQ = xQueueCreate(PTPD_QUEUE_SIZE, PACKET_SIZE);
+  queueSet = xQueueCreateSet(PTPD_QUEUE_SIZE * 2);  
+  xQueueAddToSet(net_path->eventQ, queueSet);
+  xQueueAddToSet(net_path->generalQ, queueSet);
+  // init NetPath with addresses
   // Open lwip raw udp interfaces for the event port.
-  net_path->eventPcb = udp_new();
-  if (NULL == net_path->eventPcb)
-  {
-    syslog_printf(SYSLOG_CRITICAL, "PTPD: failed to create event UDP PCB");
-    ERROR("PTPD: Failed to open event UDP PCB\n");
-    goto fail02;
-  }
-
   // Open lwip raw udp interfaces for the general port.
-  net_path->generalPcb = udp_new();
-  if (NULL == net_path->generalPcb)
-  {
-    syslog_printf(SYSLOG_CRITICAL, "PTPD: failed to create general UDP PCB");
-    ERROR("PTPD: Failed to open general UDP PCB\n");
-    goto fail03;
-  }
-
   // Configure network (broadcast/unicast) addresses (unicast disabled).
   net_path->unicastAddr = 0;
-
   // Init general multicast IP address.
-  memcpy(addr_str, DEFAULT_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
-  if (!inet_aton(addr_str, &net_addr))
-  {
-    syslog_printf(SYSLOG_CRITICAL, "PTPD: failed to encode multi-cast address: %s", addr_str);
-    ERROR("PTPD: failed to encode multi-cast address: %s\n", addr_str);
-    goto fail04;
-  }
-  net_path->multicastAddr = net_addr;
+  net_path->multicastAddr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+  struct freertos_sockaddr address;
 
+  address.sin_addr = FreeRTOS_GetIPAddress();
+  address.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
+
+  net_path->eventSock = FreeRTOS_socket(
+    FREERTOS_AF_INET,
+    FREERTOS_SOCK_DGRAM,
+    FREERTOS_IPPROTO_UDP
+  );
+  // bind
+  FreeRTOS_bind(net_path->eventSock, &address, sizeof(struct freertos_sockaddr));
+  // join igmp
+  struct freertos_ip_mreq mreq;
+  mreq.imr_interface = address;
+  mreq.imr_multiaddr.sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+  mreq.imr_multiaddr.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
+  FreeRTOS_setsockopt(net_path->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+  // prepare event sock:
+  // they share the same interface address (our address)
+  address.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
+  net_path->generalSock = FreeRTOS_socket(
+    FREERTOS_AF_INET,
+    FREERTOS_SOCK_DGRAM,
+    FREERTOS_IPPROTO_UDP
+  );
+  // bind
+  FreeRTOS_bind(net_path->generalSock, &address, sizeof(struct freertos_sockaddr));
+  // join igmp
+  struct freertos_ip_mreq mreq;
+  mreq.imr_interface = address;
+  mreq.imr_multiaddr.sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+  mreq.imr_multiaddr.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
+  FreeRTOS_setsockopt(net_path->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+  
+  // ######## for now no p2p delay measurement ################
   // Join multicast group (for receiving) on specified interface.
-  igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
+  // igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
+  //net_path->peerMulticastAddr = FreeRTOS_inet_addr(PEER_PTP_DOMAIN_ADDRESS);
 
-  // Init peer multicast IP address.
-  memcpy(addr_str, PEER_PTP_DOMAIN_ADDRESS, NET_ADDRESS_LENGTH);
-  if (!inet_aton(addr_str, &net_addr))
-  {
-    syslog_printf(SYSLOG_CRITICAL, "PTPD: failed to encode peer multi-cast address: %s", addr_str);
-    ERROR("PTPD: failed to encode peer multi-cast address: %s\n", addr_str);
-    goto fail04;
-  }
-  net_path->peerMulticastAddr = net_addr;
 
   // Join peer multicast group (for receiving) on specified interface.
-  igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
+  // igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
 
   // Multicast send only on specified interface.
-  net_path->eventPcb->mcast_ip4.addr = net_path->multicastAddr;
-  net_path->generalPcb->mcast_ip4.addr = net_path->multicastAddr;
-
+  
   // Establish the appropriate UDP bindings/connections for event port.
-  udp_recv(net_path->eventPcb, ptpd_net_event_callback, net_path);
-  udp_bind(net_path->eventPcb, IP_ADDR_ANY, PTP_EVENT_PORT);
+  //udp_recv(net_path->eventPcb, ptpd_net_event_callback, net_path);
+  //udp_bind(net_path->eventPcb, IP_ADDR_ANY, PTP_EVENT_PORT);
   // udp_connect(net_path->eventPcb, &net_addr, PTP_EVENT_PORT);
 
   // Establish the appropriate UDP bindings/connections for general port.
-  udp_recv(net_path->generalPcb, ptpd_net_general_callback, net_path);
-  udp_bind(net_path->generalPcb, IP_ADDR_ANY, PTP_GENERAL_PORT);
+  //udp_recv(net_path->generalPcb, ptpd_net_general_callback, net_path);
+  //udp_bind(net_path->generalPcb, IP_ADDR_ANY, PTP_GENERAL_PORT);
   // udp_connect(net_path->generalPcb, &net_addr, PTP_GENERAL_PORT);
 
   // Return success.
   return true;
-
-fail04:
-  udp_remove(net_path->generalPcb);
-fail03:
-  udp_remove(net_path->eventPcb);
-fail02:
-fail01:
-  return false;
 }
 
 // Shut down the UDP and network stuff.
 bool ptpd_net_shutdown(NetPath *net_path)
 {
-  ip_addr_t multicast_addr;
-
-  DBG("ptpd_net_shutdown\n");
-
-  // Leave multicast group.
-  multicast_addr.addr = net_path->multicastAddr;
-  if (multicast_addr.addr) igmp_leavegroup(IP_ADDR_ANY, &multicast_addr);
-
-  // Disconnect and close the event UDP interface.
-  if (net_path->eventPcb)
-  {
-    udp_disconnect(net_path->eventPcb);
-    udp_remove(net_path->eventPcb);
-    net_path->eventPcb = NULL;
-  }
-
-  // Disconnect and close the general UDP interface.
-  if (net_path->generalPcb)
-  {
-    udp_disconnect(net_path->generalPcb);
-    udp_remove(net_path->generalPcb);
-    net_path->generalPcb = NULL;
-  }
-
-  // Clear the network addresses.
-  net_path->multicastAddr = 0;
-  net_path->unicastAddr = 0;
-
-  // Return success.
+  vTaskDelete(event_tsk_handle);
+  vTaskDelete(general_tsk_handle);
+  FreeRTOS_closesocket( net_path->eventSock);
+  FreeRTOS_closesocket( net_path->generalSock);
+  vQueueDelete(net_path->eventQ);
+  vQueueDelete(net_path->generalQ);
   return true;
 }
 
@@ -276,10 +134,13 @@ bool ptpd_net_shutdown(NetPath *net_path)
 // otherwise return 0.
 int32_t ptpd_net_select(NetPath *net_path, const TimeInternal *timeout)
 {
+  QueueSetMemberHandle_t activated = xQueueSelectFromSet( queueSet, portMAX_DELAY);
+  // block until we receive
+  return activated;
   // Check the packet queues.  If there is data, return true.
-  if (ptpd_net_queue_check(&net_path->eventQ) || ptpd_net_queue_check(&net_path->generalQ)) return 1;
+  //if (ptpd_net_queue_check(&net_path->eventQ) || ptpd_net_queue_check(&net_path->generalQ)) return 1;
 
-  return 0;
+  //return 0;
 }
 
 // Delete all waiting packets in event queue.

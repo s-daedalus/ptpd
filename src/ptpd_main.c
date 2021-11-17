@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ptpd.h"
-#include "syslog.h"
-#include "shell.h"
+//#include "syslog.h"
+//#include "shell.h"
 
 #if LWIP_PTPD
 
@@ -10,96 +10,96 @@
 static bool ptpd_slave_only = true;
 static PtpClock ptp_clock;
 static ForeignMasterRecord ptp_foreign_records[DEFAULT_MAX_FOREIGN_RECORDS];
-static sys_mbox_t ptp_alert_queue;
+//static sys_mbox_t ptp_alert_queue;
 
 // Shell command to show the PTPD status.
 static bool ptpd_shell_ptpd(int argc, char **argv)
 {
-  char sign;
-  const char *s;
-  uint8_t *uuid;
-
-  // Master clock UUID.
-  uuid = (uint8_t *) ptp_clock.parentDS.parentPortIdentity.clockIdentity;
-  shell_printf("master id: %02x%02x%02x%02x%02x%02x%02x%02x\n",
-        uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7]);
-
-  switch (ptp_clock.portDS.portState)
-  {
-    case PTP_INITIALIZING:
-      s = "init";
-      break;
-    case PTP_FAULTY:
-      s = "faulty";
-      break;
-    case PTP_LISTENING:
-      s = "listening";
-      break;
-    case PTP_PASSIVE:
-      s = "passive";
-      break;
-    case PTP_UNCALIBRATED:
-      s = "uncalibrated";
-      break;
-    case PTP_SLAVE:
-      s = "slave";
-      break;
-    case PTP_PRE_MASTER:
-      s = "pre master";
-      break;
-    case PTP_MASTER:
-      s = "master";
-      break;
-    case PTP_DISABLED:
-      s = "disabled";
-      break;
-    default:
-      s = "?";
-      break;
-  }
-
-  // State of the PTP.
-  shell_printf("state: %s\n", s);
-
-  // One way delay.
-  switch (ptp_clock.portDS.delayMechanism)
-  {
-    case E2E:
-      shell_puts("mode: end to end\n");
-      shell_printf("path delay: %d nsec\n", ptp_clock.currentDS.meanPathDelay.nanoseconds);
-      break;
-    case P2P:
-      shell_puts("mode: peer to peer\n");
-      shell_printf("path delay: %d nsec\n", ptp_clock.portDS.peerMeanPathDelay.nanoseconds);
-      break;
-    default:
-      shell_puts("mode: unknown\n");
-      shell_printf("path delay: unknown\n");
-      /* none */
-      break;
-  }
-
-  // Are we in master mode?
-  if (ptp_clock.portDS.portState != PTP_MASTER)
-  {
-    // Offset from master.
-    if (ptp_clock.currentDS.offsetFromMaster.seconds)
-    {
-      shell_printf("offset: %d sec\n", ptp_clock.currentDS.offsetFromMaster.seconds);
-    }
-    else
-    {
-      shell_printf("offset: %d nsec\n", ptp_clock.currentDS.offsetFromMaster.nanoseconds);
-    }
-
-    // Observed drift from master.
-    sign = ' ';
-    if (ptp_clock.observedDrift > 0) sign = '+';
-    if (ptp_clock.observedDrift < 0) sign = '-';
-
-    shell_printf("drift: %c%d.%03d ppm\n", sign, abs(ptp_clock.observedDrift / 1000), abs(ptp_clock.observedDrift % 1000));
-  }
-
+//  char sign;
+//  const char *s;
+//  uint8_t *uuid;
+//
+//  // Master clock UUID.
+//  uuid = (uint8_t *) ptp_clock.parentDS.parentPortIdentity.clockIdentity;
+//  shell_printf("master id: %02x%02x%02x%02x%02x%02x%02x%02x\n",
+//        uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7]);
+//
+//  switch (ptp_clock.portDS.portState)
+//  {
+//    case PTP_INITIALIZING:
+//      s = "init";
+//      break;
+//    case PTP_FAULTY:
+//      s = "faulty";
+//      break;
+//    case PTP_LISTENING:
+//      s = "listening";
+//      break;
+//    case PTP_PASSIVE:
+//      s = "passive";
+//      break;
+//    case PTP_UNCALIBRATED:
+//      s = "uncalibrated";
+//      break;
+//    case PTP_SLAVE:
+//      s = "slave";
+//      break;
+//    case PTP_PRE_MASTER:
+//      s = "pre master";
+//      break;
+//    case PTP_MASTER:
+//      s = "master";
+//      break;
+//    case PTP_DISABLED:
+//      s = "disabled";
+//      break;
+//    default:
+//      s = "?";
+//      break;
+//  }
+//
+//  // State of the PTP.
+//  shell_printf("state: %s\n", s);
+//
+//  // One way delay.
+//  switch (ptp_clock.portDS.delayMechanism)
+//  {
+//    case E2E:
+//      shell_puts("mode: end to end\n");
+//      shell_printf("path delay: %d nsec\n", ptp_clock.currentDS.meanPathDelay.nanoseconds);
+//      break;
+//    case P2P:
+//      shell_puts("mode: peer to peer\n");
+//      shell_printf("path delay: %d nsec\n", ptp_clock.portDS.peerMeanPathDelay.nanoseconds);
+//      break;
+//    default:
+//      shell_puts("mode: unknown\n");
+//      shell_printf("path delay: unknown\n");
+//      /* none */
+//      break;
+//  }
+//
+//  // Are we in master mode?
+//  if (ptp_clock.portDS.portState != PTP_MASTER)
+//  {
+//    // Offset from master.
+//    if (ptp_clock.currentDS.offsetFromMaster.seconds)
+//    {
+//      shell_printf("offset: %d sec\n", ptp_clock.currentDS.offsetFromMaster.seconds);
+//    }
+//    else
+//    {
+//      shell_printf("offset: %d nsec\n", ptp_clock.currentDS.offsetFromMaster.nanoseconds);
+//    }
+//
+//    // Observed drift from master.
+//    sign = ' ';
+//    if (ptp_clock.observedDrift > 0) sign = '+';
+//    if (ptp_clock.observedDrift < 0) sign = '-';
+//
+//    shell_printf("drift: %c%d.%03d ppm\n", sign, abs(ptp_clock.observedDrift / 1000), abs(ptp_clock.observedDrift % 1000));
+//  }
+//
   return true;
 }
 

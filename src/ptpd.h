@@ -7,12 +7,12 @@
 #define __PTPD_H__
 
 #if defined(USE_HAL_DRIVER)
-#include "hal_system.h"
+//#include "hal_system.h"
 #endif
 #include "cmsis_compiler.h"
-#include "lwip/opt.h"
-#include "network.h"
-#include "outputf.h"
+//#include "lwip/opt.h"
+//#include "network.h"
+//#include "outputf.h"
 
 #if LWIP_PTPD
 

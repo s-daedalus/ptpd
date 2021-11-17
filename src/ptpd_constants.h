@@ -2,7 +2,7 @@
 #define CONSTANTS_H_
 
 #include "cmsis_os2.h"
-#include "lwip/netif.h"
+//#include "lwip/netif.h"
 
 #ifdef __cplusplus
 extern "C" {

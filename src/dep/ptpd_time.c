@@ -1,6 +1,7 @@
 #include "ptpd.h"
-#include "random.h"
-#include "ethernetif.h"
+//#include "random.h"
+//#include "ethernetif.h"
+#include "ethptp.h"
 
 #if LWIP_PTPD
 

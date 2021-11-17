@@ -1,5 +1,5 @@
 #include "ptpd.h"
-#include "syslog.h"
+//#include "syslog.h"
 
 #if LWIP_PTPD
 
