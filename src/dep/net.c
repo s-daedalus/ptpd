@@ -750,7 +750,7 @@ netRecvGeneral(Octet * buf, TimeInternal * time, NetPath * netPath)
 //   if filled, send to this unicast dest;
 //   if zero, do the normal operation (send to unicast with -u, or send to the multcast group)
 //
-///	TODO: (freeRTOS port) we do not use multicast loopback(? at least the sockopt is not set) so we have to make sure the transmit ts get handled correctly
+///	TODO: (freeRTOS port) we currently do not receive our own multicasts, so we have to make sure the transmit ts get handled correctly
 /// TODO: merge these 2 functions into one
 ///
 ssize_t 
