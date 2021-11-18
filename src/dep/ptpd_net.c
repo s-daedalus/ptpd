@@ -4,6 +4,7 @@
 #include "FreeRTOS_Sockets.h"
 #include "FreeRTOS_IGMP.h"
 #include "ptpd.h"
+#include "stm32f7xx_hal_ptp.h"
 
 
 #if FREERTOS_PTPD
@@ -185,8 +186,9 @@ static ssize_t ptpd_net_recv(octet_t *buf, TimeInternal *time, BufQueue *queue)
   // Get the timestamp of the packet.
   if (time != NULL)
   {
-    time->seconds = p->time_sec;
-    time->nanoseconds = p->time_nsec;
+    ptptime_t ts_time = ethptp_get_last_rx_ts();
+    time->seconds = ts_time.tv_sec;
+    time->nanoseconds = ts_time.tv_nsec;
   }
 
   // Get the length of the buffer to copy.
@@ -217,7 +219,16 @@ static ssize_t ptpd_net_recv(octet_t *buf, TimeInternal *time, BufQueue *queue)
 
 ssize_t ptpd_net_recv_event(NetPath *net_path, octet_t *buf, TimeInternal *time)
 {
-  return ptpd_net_recv(buf, time, &net_path->eventQ);
+  //return ptpd_net_recv(buf, time, &net_path->eventQ);
+  // get element from event rx queue
+  xQueueReceive(net_path->eventQ, buf, portMAX_DELAY);
+  // get rx_timestamp
+  if (time !=NULL){
+    ptptime_t ts_time = ethptp_get_last_rx_ts();
+    time->seconds = ts_time.tv_sec;
+    time->nanoseconds = ts_time.tv_nsec;
+  }
+
 }
 
 ssize_t ptpd_net_recv_general(NetPath *net_path, octet_t *buf, TimeInternal *time)
@@ -267,6 +278,7 @@ static ssize_t ptpd_net_send(const octet_t *buf, int16_t  length, TimeInternal *
     // of the buffer just transmitted. This call will block for up to a certain amount
     // of time before it may fail if a timestamp was not obtained.
     ethernetif_get_tx_timestamp(p);
+    // use ethptp_get_last_tx_ts() instead
   }
 #endif
 
