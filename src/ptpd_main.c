@@ -189,7 +189,7 @@ static void ptpd_thread(void *arg)
 // PTPD initialization.
 void ptpd_init(bool slave_only)
 {
-  xTaskCreate(ptpd_thread, "ptp", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-10, &pttp_task );  
+  xTaskCreate(ptpd_thread, "ptp", 1024, NULL, ipconfigIP_TASK_PRIORITY-1, &pttp_task );  
   /*sys_thread_t t;
 
   // Save the slave only flag.

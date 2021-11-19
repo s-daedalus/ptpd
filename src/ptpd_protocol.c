@@ -207,7 +207,7 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
 static bool ptpd_protocol_do_init(PtpClock *ptp_clock)
 {
   // Initialize networking.
-  ptpd_net_shutdown(&ptp_clock->netPath);
+  //ptpd_net_shutdown(&ptp_clock->netPath);
 
   // Initialize the network.
   if (!ptpd_net_init(&ptp_clock->netPath, ptp_clock))

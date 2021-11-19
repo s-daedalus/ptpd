@@ -6,6 +6,7 @@
 #include "ptpd.h"
 #include "ptpd_net.h"
 #include "stm32f7xx_hal_ptp.h"
+#include "FreeRTOS_errno_TCP.h"
 
 
 #if FREERTOS_PTPD
@@ -19,17 +20,22 @@ static void ptpd_net_event_task(void *args)
 {
 
   NetPath * net_path = (NetPath*) args;
+  uint8_t plb;
   struct freertos_sockaddr sender;
   for(;;){
     // block on recvfrom call
-    int result = FreeRTOS_recvfrom(net_path->eventSock, event_buf, PACKET_SIZE, 0, &sender, sizeof(struct freertos_sockaddr));
-    if (result){
+    int result = FreeRTOS_recvfrom(net_path->eventSock, &plb, PACKET_SIZE,FREERTOS_ZERO_COPY, &sender, sizeof(sender));
+    if (result>0){
       // receive from event socket, enqueue received packet
+      memcpy(event_buf, plb, result);
       packet_buffer_t pbuf;
       pbuf.buffer = event_buf;
       pbuf.length = result;
       pbuf.timestamp = ethptp_get_last_rx_ts();
-      result = xQueueSendToBack(net_path->eventQ, &pbuf, portMAX_DELAY);
+      int r2 = xQueueSendToBack(net_path->eventQ, &pbuf, portMAX_DELAY);
+    }
+    if(result >=0){
+       FreeRTOS_ReleaseUDPPayloadBuffer(plb);
     }
   }
 }
@@ -41,7 +47,7 @@ static void ptpd_net_general_task(void *args)
   for(;;){
     // block on recvfrom call
     int result = FreeRTOS_recvfrom(net_path->generalSock, general_buf, PACKET_SIZE, 0, &sender, sizeof(struct freertos_sockaddr));
-    if (result){
+    if (result>0){
       // receive from general socket, enqueue received packet
       packet_buffer_t pbuf;
       pbuf.buffer = general_buf;
@@ -101,9 +107,9 @@ bool ptpd_net_init(NetPath *net_path, PtpClock *ptp_clock)
   mreq.imr_multiaddr.sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
   mreq.imr_multiaddr.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
   FreeRTOS_setsockopt(net_path->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
-  int result = xTaskCreate(ptpd_net_event_task, "ptpd_ercvt", 256, NULL, configMAX_PRIORITIES - 5, &event_tsk_handle);
+  int result = xTaskCreate(ptpd_net_event_task, "ptpd_ercvt", 256, net_path, ipconfigIP_TASK_PRIORITY - 2, &event_tsk_handle);
 
-  result = xTaskCreate(ptpd_net_general_task, "ptpd_grcvt", 256, NULL, configMAX_PRIORITIES - 6, &general_tsk_handle);
+  result = xTaskCreate(ptpd_net_general_task, "ptpd_grcvt", 256, net_path, ipconfigIP_TASK_PRIORITY - 3, &general_tsk_handle);
   // ######## for now no p2p delay measurement ################
   // Join multicast group (for receiving) on specified interface.
   // igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
