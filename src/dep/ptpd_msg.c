@@ -1,5 +1,9 @@
 #include <string.h>
 #include "ptpd.h"
+#include "FreeRTOS_IP.h"
+
+#define htons(x) FreeRTOS_htons(x)
+#define htonl(x) FreeRTOS_htonl(x)
 
 #if LWIP_PTPD
 

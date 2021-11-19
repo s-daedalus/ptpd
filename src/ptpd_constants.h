@@ -242,7 +242,7 @@ enum
 // UDP/IPv4 dependent.
 #define SUBDOMAIN_ADDRESS_LENGTH    4
 #define PORT_ADDRESS_LENGTH         2
-#define PTP_UUID_LENGTH             NETIF_MAX_HWADDR_LEN
+#define PTP_UUID_LENGTH             6 // we use mac as uuid?!? //NETIF_MAX_HWADDR_LEN
 #define CLOCK_IDENTITY_LENGTH       8
 #define FLAG_FIELD_LENGTH           2
 

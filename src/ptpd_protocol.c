@@ -1,4 +1,5 @@
 #include "ptpd.h"
+#include "stm32f7xx_hal_ptp.h"
 //#include "syslog.h"
 
 #if LWIP_PTPD
@@ -115,17 +116,17 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
     case PTP_INITIALIZING:
       ptp_clock->portDS.portState = PTP_INITIALIZING;
       ptp_clock->recommendedState = PTP_INITIALIZING;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering INITIALIZING state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering INITIALIZING state");
       break;
 
     case PTP_FAULTY:
       ptp_clock->portDS.portState = PTP_FAULTY;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering FAULTY state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering FAULTY state");
       break;
 
     case PTP_DISABLED:
       ptp_clock->portDS.portState = PTP_DISABLED;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering DISABLED state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering DISABLED state");
       break;
 
     case PTP_LISTENING:
@@ -133,7 +134,7 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
                                                pow2ms(ptp_clock->portDS.logAnnounceInterval));
       ptp_clock->portDS.portState = PTP_LISTENING;
       ptp_clock->recommendedState = PTP_LISTENING;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering LISTENING state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering LISTENING state");
       break;
 
     case PTP_PRE_MASTER:
@@ -160,7 +161,7 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
             break;
       }
       ptp_clock->portDS.portState = PTP_MASTER;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering MASTER state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering MASTER state");
       break;
 
     case PTP_PASSIVE:
@@ -171,7 +172,7 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
         ptpd_timer_start(PDELAYREQ_INTERVAL_TIMER, ptpd_get_rand(pow2ms(ptp_clock->portDS.logMinPdelayReqInterval + 1)));
       }
       ptp_clock->portDS.portState = PTP_PASSIVE;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering PASSIVE state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering PASSIVE state");
       break;
 
     case PTP_UNCALIBRATED:
@@ -190,12 +191,12 @@ void ptpd_protocol_to_state(PtpClock *ptp_clock, uint8_t state)
             break;
       }
       ptp_clock->portDS.portState = PTP_UNCALIBRATED;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering UNCALIBRATED state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering UNCALIBRATED state");
       break;
 
     case PTP_SLAVE:
       ptp_clock->portDS.portState = PTP_SLAVE;
-      syslog_printf(SYSLOG_NOTICE, "PTPD: entering SLAVE state");
+      //syslog_printf(SYSLOG_NOTICE, "PTPD: entering SLAVE state");
       break;
 
     default:
@@ -1177,7 +1178,8 @@ static void issue_sync(PtpClock *ptp_clock)
   TimeInternal internal_time;
 
   // Try to predict outgoing time stamp.
-  ptpd_get_time(&internal_time);
+  ethptp_get_time(&internal_time);
+  
   ptpd_from_internal_time(&internal_time, &origin_timestamp);
   ptpd_msg_pack_sync(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);
 
@@ -1226,7 +1228,7 @@ static void issue_delay_req(PtpClock *ptp_clock)
   Timestamp origin_timestamp;
   TimeInternal internal_time;
 
-  ptpd_get_time(&internal_time);
+  ethptp_get_time(&internal_time);
   ptpd_from_internal_time(&internal_time, &origin_timestamp);
 
   ptpd_msg_pack_delay_req(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);
@@ -1259,8 +1261,8 @@ static void issue_peer_delay_req(PtpClock *ptp_clock)
 {
   Timestamp origin_timestamp;
   TimeInternal internal_time;
-
-  ptpd_get_time(&internal_time);
+  
+  ethptp_get_time(&internal_time);
   ptpd_from_internal_time(&internal_time, &origin_timestamp);
 
   ptpd_msg_pack_peer_delay_req(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);

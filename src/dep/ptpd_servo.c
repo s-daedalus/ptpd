@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include "ptpd.h"
-#include "systime.h"
-#include "syslog.h"
+#include "stm32f7xx_hal_ptp.h"
+#include "FreeRTOS.h"
+//#include "systime.h"
+//#include "syslog.h"
 
 #if LWIP_PTPD
 
@@ -50,10 +52,12 @@ void ptpd_servo_init_clock(PtpClock *ptp_clock)
 
   // Level clock.
   if (!ptp_clock->servo.noAdjust)
-    ptpd_adj_freq(0);
+    //ptpd_adj_freq(0);
+    ethptp_adj_freq(0);
 
   // Empty the event queue.
-  ptpd_net_empty_event_queue(&ptp_clock->netPath);
+  //ptpd_net_empty_event_queue(&ptp_clock->netPath);
+  xQueueReset(ptp_clock->netPath.eventQ);
 }
 
 static int32_t ptpd_servo_order(int32_t n)
@@ -321,19 +325,20 @@ void ptpd_servo_update_clock(PtpClock *ptp_clock)
       if (!ptp_clock->servo.noResetClock)
       {
         // Get the current time.
-        ptpd_get_time(&timeTmp);
-
+        ethptp_get_time(&timeTmp);
+        
         // Subtract the offset from the master.
         ptpd_sub_time(&timeTmp, &timeTmp, &ptp_clock->currentDS.offsetFromMaster);
 
         // Set the time with the offset.
-        ptpd_set_time(&timeTmp);
+        //ptpd_set_time(&timeTmp);
+        ethptp_set_time(&timeTmp);
 
         // Get the date from system time.
-        systime_str(buffer, sizeof(buffer));
+        //systime_str(buffer, sizeof(buffer));
 
         // Log the time being set.
-        syslog_printf(SYSLOG_NOTICE, "PTPD: setting %s", buffer);
+        //syslog_printf(SYSLOG_NOTICE, "PTPD: setting %s", buffer);
 
         // Reinitialize clock.
         ptpd_servo_init_clock(ptp_clock);
@@ -341,7 +346,8 @@ void ptpd_servo_update_clock(PtpClock *ptp_clock)
       else
       {
         adj = ptp_clock->currentDS.offsetFromMaster.nanoseconds > 0 ? ADJ_FREQ_MAX : -ADJ_FREQ_MAX;
-        ptpd_adj_freq(-adj);
+        //ptpd_adj_freq(-adj);
+        ethptp_adj_freq(-adj);
       }
     }
   }
@@ -371,7 +377,8 @@ void ptpd_servo_update_clock(PtpClock *ptp_clock)
     if (!ptp_clock->servo.noAdjust)
     {
       adj = offsetNorm / ptp_clock->servo.ap + ptp_clock->observedDrift;
-      ptpd_adj_freq(-adj);
+      //ptpd_adj_freq(-adj);
+      ethptp_adj_freq(-adj);
     }
 
     if (DEFAULT_PARENTS_STATS)

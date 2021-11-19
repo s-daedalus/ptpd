@@ -2,12 +2,15 @@
 //#include "random.h"
 //#include "ethernetif.h"
 #include "ethptp.h"
+#include "FreeRTOS_IP.h"
 
 #if LWIP_PTPD
 
 uint32_t ptpd_get_rand(uint32_t rand_max)
 {
-  return random_get() % rand_max;
+  uint32_t rand;
+  xApplicationGetRandomNumber(&rand);
+  return rand % rand_max;
 }
 
 #if defined(STM32F4) || defined(STM32F7)

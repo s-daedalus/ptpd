@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ptpd.h"
+#include "FreeRTOS.h"
 //#include "syslog.h"
 //#include "shell.h"
 
@@ -10,6 +11,7 @@
 static bool ptpd_slave_only = true;
 static PtpClock ptp_clock;
 static ForeignMasterRecord ptp_foreign_records[DEFAULT_MAX_FOREIGN_RECORDS];
+static TaskHandle_t pttp_task;
 //static sys_mbox_t ptp_alert_queue;
 
 // Shell command to show the PTPD status.
@@ -109,7 +111,7 @@ static void ptpd_thread(void *arg)
   memset(&ptp_clock, 0, sizeof(ptp_clock));
 
   // Run the clock in slave only?
-  ptp_clock.rtOpts.slaveOnly = ptpd_slave_only;
+  ptp_clock.rtOpts.slaveOnly = 1;
 
   // Initialize run-time options to default values.
   ptp_clock.rtOpts.announceInterval = DEFAULT_ANNOUNCE_INTERVAL;
@@ -144,11 +146,11 @@ static void ptpd_thread(void *arg)
   if (ptp_clock.rtOpts.servo.ai < 1) ptp_clock.rtOpts.servo.ai = 1;
 
   // Wait until the network interface is up.
-  while (!network_is_up())
-  {
+  //while (!network_is_up())
+  //{
     // Sleep for 500 milliseconds.
-    sys_msleep(500);
-  }
+    //sys_msleep(500);
+  //}
 
   // Enter state PTP_INITIALIZING.
   ptpd_protocol_to_state(&ptp_clock, PTP_INITIALIZING);
@@ -159,14 +161,14 @@ static void ptpd_thread(void *arg)
     void *msg;
 
     // If network interface is not up, then hold everything.
-    if (!network_is_up() || ip4_addr_isany_val(network_get_address()))
+    /*if (!network_is_up() || ip4_addr_isany_val(network_get_address()))
     {
       // Wait until the network interface comes up.
       while (!network_is_up() || ip4_addr_isany_val(network_get_address())) sys_msleep(500);
 
       // Network interface is now up so reinitialize.
       ptpd_protocol_to_state(&ptp_clock, PTP_INITIALIZING);
-    }
+    }*/
     
     // Process the current state.
     do
@@ -180,14 +182,15 @@ static void ptpd_thread(void *arg)
     while (ptpd_net_select(&ptp_clock.netPath, 0) > 0);
     
     // Wait up to 100ms for something to do, then do something anyway.
-    sys_arch_mbox_fetch(&ptp_alert_queue, &msg, 100);
+    //sys_arch_mbox_fetch(&ptp_alert_queue, &msg, 100);
   }
 }
 
 // PTPD initialization.
 void ptpd_init(bool slave_only)
 {
-  sys_thread_t t;
+  xTaskCreate(ptpd_thread, "ptp", configMINIMAL_STACK_SIZE, NULL, configMAX_PRIORITIES-10, &pttp_task );  
+  /*sys_thread_t t;
 
   // Save the slave only flag.
   ptpd_slave_only = slave_only;
@@ -214,14 +217,14 @@ void ptpd_init(bool slave_only)
   {
     // Log the error.
     syslog_printf(SYSLOG_ERROR, "PTPD: failed to create alert queue mailbox");
-  }
+  }*/
 }
 
 // Notify the PTPD thread of a pending operation.
 void ptpd_alert(void)
 {
   // Send a message to the alert queue to wake up the PTP thread.
-  sys_mbox_trypost(&ptp_alert_queue, NULL);
+  //sys_mbox_trypost(&ptp_alert_queue, NULL);
 }
 
 // Get the current PTPD state.
