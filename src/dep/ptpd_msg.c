@@ -34,7 +34,8 @@ void ptpd_msg_unpack_header(const octet_t *buf, MsgHeader *header)
 // Pack header message.
 void ptpd_msg_pack_header(const PtpClock *ptp_clock, octet_t *buf)
 {
-  nibble_t transport = 0x80; // (spec annex D)
+  // we don't need legacy padding so dont request it!
+  nibble_t transport = 0x00;//0x80; // (spec annex D)
   *(uint8_t*)(buf + 0) = transport;
   *(uint4bit_t*)(buf  + 1) = ptp_clock->portDS.versionNumber;
   *(uint8_t*)(buf + 4) = ptp_clock->defaultDS.domainNumber;
