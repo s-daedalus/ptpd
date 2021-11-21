@@ -7,143 +7,76 @@
 #include "ptpd_net.h"
 #include "stm32f7xx_hal_ptp.h"
 #include "FreeRTOS_errno_TCP.h"
-
+#include "stm32f7xx_hal.h"
 
 #if FREERTOS_PTPD
 #define PTPD_QUEUE_SIZE (1)
-static uint8_t event_buf[PACKET_SIZE];
-static uint8_t general_buf[PACKET_SIZE];
-static TaskHandle_t event_tsk_handle;
-static TaskHandle_t general_tsk_handle;
-static QueueSetHandle_t queueSet;
-static void ptpd_net_event_task(void *args)
-{
-
-  NetPath * net_path = (NetPath*) args;
-  uint8_t plb;
-  struct freertos_sockaddr sender;
-  for(;;){
-    // block on recvfrom call
-    int result = FreeRTOS_recvfrom(net_path->eventSock, &plb, PACKET_SIZE,FREERTOS_ZERO_COPY, &sender, sizeof(sender));
-    if (result>0){
-      // receive from event socket, enqueue received packet
-      memcpy(event_buf, plb, result);
-      packet_buffer_t pbuf;
-      pbuf.buffer = event_buf;
-      pbuf.length = result;
-      pbuf.timestamp = ethptp_get_last_rx_ts();
-      int r2 = xQueueSendToBack(net_path->eventQ, &pbuf, portMAX_DELAY);
-    }
-    if(result >=0){
-       FreeRTOS_ReleaseUDPPayloadBuffer(plb);
-    }
-  }
-}
-
-static void ptpd_net_general_task(void *args)
-{
-  NetPath * net_path = (NetPath*) args;
-  struct freertos_sockaddr sender;
-  for(;;){
-    // block on recvfrom call
-    int result = FreeRTOS_recvfrom(net_path->generalSock, general_buf, PACKET_SIZE, 0, &sender, sizeof(struct freertos_sockaddr));
-    if (result>0){
-      // receive from general socket, enqueue received packet
-      packet_buffer_t pbuf;
-      pbuf.buffer = general_buf;
-      pbuf.length = result;
-      // todo: check if necessary
-      pbuf.timestamp = ethptp_get_last_rx_ts();
-      result = xQueueSendToBack(net_path->generalQ, &pbuf, portMAX_DELAY);
-    }
-  }
-}
-
+static Socket_t eventSock, generalSock;
+static SocketSet_t xFD_Set;
+static const TickType_t xRxBlockTime = 0;
 // Start all of the UDP stuff.
 bool ptpd_net_init(NetPath *net_path, PtpClock *ptp_clock)
 {
-  net_path->eventQ = xQueueCreate(PTPD_QUEUE_SIZE, sizeof(packet_buffer_t));
-  net_path->generalQ = xQueueCreate(PTPD_QUEUE_SIZE, sizeof(packet_buffer_t));
-  queueSet = xQueueCreateSet(PTPD_QUEUE_SIZE * 2);  
-  xQueueAddToSet(net_path->eventQ, queueSet);
-  xQueueAddToSet(net_path->generalQ, queueSet);
-  // init NetPath with addresses
-  // Open lwip raw udp interfaces for the event port.
-  // Open lwip raw udp interfaces for the general port.
-  // Configure network (broadcast/unicast) addresses (unicast disabled).
-  net_path->unicastAddr = 0;
-  // Init general multicast IP address.
-  net_path->multicastAddr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
-  struct freertos_sockaddr address;
-
-  address.sin_addr = FreeRTOS_GetIPAddress();
-  address.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
-
-  net_path->eventSock = FreeRTOS_socket(
-    FREERTOS_AF_INET,
-    FREERTOS_SOCK_DGRAM,
-    FREERTOS_IPPROTO_UDP
-  );
-  // bind
-  FreeRTOS_bind(net_path->eventSock, &address, sizeof(struct freertos_sockaddr));
-  // join igmp
+  /* USER CODE BEGIN 5 */
+  struct freertos_sockaddr xBindAddress;
   struct freertos_ip_mreq mreq;
-  mreq.imr_interface = address;
+  BaseType_t op_result;
+  /* Create the set of sockets that will be passed into FreeRTOS_select(). */
+  xFD_Set = FreeRTOS_CreateSocketSet();
+  /* Attempt to open the socket. */
+  eventSock = FreeRTOS_socket(FREERTOS_AF_INET,
+                                     FREERTOS_SOCK_DGRAM, /*FREERTOS_SOCK_DGRAM for UDP.*/
+                                     FREERTOS_IPPROTO_UDP);
+
+  /* Check the socket was created. */
+  configASSERT(eventSock != FREERTOS_INVALID_SOCKET);
+  // Bind
+  xBindAddress.sin_addr = FreeRTOS_GetIPAddress();
+  xBindAddress.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
+  op_result = FreeRTOS_bind(eventSock, &xBindAddress, sizeof(xBindAddress));
+  /* join multicast group*/
+  mreq.imr_interface = xBindAddress;
   mreq.imr_multiaddr.sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
   mreq.imr_multiaddr.sin_port = FreeRTOS_htons(PTP_EVENT_PORT);
-  FreeRTOS_setsockopt(net_path->eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
-  // prepare event sock:
-  // they share the same interface address (our address)
-  address.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
-  net_path->generalSock = FreeRTOS_socket(
-    FREERTOS_AF_INET,
-    FREERTOS_SOCK_DGRAM,
-    FREERTOS_IPPROTO_UDP
-  );
-  // bind
-  FreeRTOS_bind(net_path->generalSock, &address, sizeof(struct freertos_sockaddr));
-  // join igmp
-  mreq.imr_interface = address;
+  op_result = FreeRTOS_setsockopt(eventSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+
+  /* Attempt to open the socket. */
+  generalSock = FreeRTOS_socket(FREERTOS_AF_INET,
+                                     FREERTOS_SOCK_DGRAM, /*FREERTOS_SOCK_DGRAM for UDP.*/
+                                     FREERTOS_IPPROTO_UDP);
+
+  /* Check the socket was created. */
+  configASSERT(generalSock != FREERTOS_INVALID_SOCKET);
+  // Bind
+  xBindAddress.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
+  op_result = FreeRTOS_bind(generalSock, &xBindAddress, sizeof(xBindAddress));
+  /* join multicast group*/
+  mreq.imr_interface = xBindAddress;
   mreq.imr_multiaddr.sin_addr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
   mreq.imr_multiaddr.sin_port = FreeRTOS_htons(PTP_GENERAL_PORT);
-  FreeRTOS_setsockopt(net_path->generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
-  int result = xTaskCreate(ptpd_net_event_task, "ptpd_ercvt", 256, net_path, ipconfigIP_TASK_PRIORITY - 2, &event_tsk_handle);
+  op_result = FreeRTOS_setsockopt(generalSock, FREERTOS_IPPROTO_UDP, FREERTOS_SO_IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
-  result = xTaskCreate(ptpd_net_general_task, "ptpd_grcvt", 256, net_path, ipconfigIP_TASK_PRIORITY - 3, &general_tsk_handle);
-  // ######## for now no p2p delay measurement ################
-  // Join multicast group (for receiving) on specified interface.
-  // igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
-  //net_path->peerMulticastAddr = FreeRTOS_inet_addr(PEER_PTP_DOMAIN_ADDRESS);
-
-
-  // Join peer multicast group (for receiving) on specified interface.
-  // igmp_joingroup(&interface_addr, (ip4_addr_t *) &net_addr);
-
-  // Multicast send only on specified interface.
-  
-  // Establish the appropriate UDP bindings/connections for event port.
-  //udp_recv(net_path->eventPcb, ptpd_net_event_callback, net_path);
-  //udp_bind(net_path->eventPcb, IP_ADDR_ANY, PTP_EVENT_PORT);
-  // udp_connect(net_path->eventPcb, &net_addr, PTP_EVENT_PORT);
-
-  // Establish the appropriate UDP bindings/connections for general port.
-  //udp_recv(net_path->generalPcb, ptpd_net_general_callback, net_path);
-  //udp_bind(net_path->generalPcb, IP_ADDR_ANY, PTP_GENERAL_PORT);
-  // udp_connect(net_path->generalPcb, &net_addr, PTP_GENERAL_PORT);
-
-  // Return success.
+  // set blocktimes to 0
+  op_result = FreeRTOS_setsockopt( eventSock, 0, FREERTOS_SO_RCVTIMEO,
+                             &xRxBlockTime, sizeof( xRxBlockTime ) );
+  /* Add the created socket to the set for the READ event only. */
+  FreeRTOS_FD_SET( eventSock, xFD_Set, eSELECT_READ );
+  op_result = FreeRTOS_setsockopt( generalSock, 0, FREERTOS_SO_RCVTIMEO,
+                             &xRxBlockTime, sizeof( xRxBlockTime ) );
+  /* Add the created socket to the set for the READ event only. */
+  FreeRTOS_FD_SET( generalSock, xFD_Set, eSELECT_READ );
   return true;
 }
 
 // Shut down the UDP and network stuff.
 bool ptpd_net_shutdown(NetPath *net_path)
 {
-  vTaskDelete(event_tsk_handle);
-  vTaskDelete(general_tsk_handle);
-  FreeRTOS_closesocket( net_path->eventSock);
-  FreeRTOS_closesocket( net_path->generalSock);
-  vQueueDelete(net_path->eventQ);
-  vQueueDelete(net_path->generalQ);
+  //vTaskDelete(event_tsk_handle);
+  //vTaskDelete(general_tsk_handle);
+  //FreeRTOS_closesocket( net_path->eventSock);
+  //FreeRTOS_closesocket( net_path->generalSock);
+  //vQueueDelete(net_path->eventQ);
+  //vQueueDelete(net_path->generalQ);
   return true;
 }
 
@@ -152,69 +85,82 @@ bool ptpd_net_shutdown(NetPath *net_path)
 // otherwise return 0.
 int32_t ptpd_net_select(NetPath *net_path, const TimeInternal *timeout)
 {
-  QueueSetMemberHandle_t activated = xQueueSelectFromSet( queueSet, portMAX_DELAY);
-  // block until we receive
-  return activated;
-  // Check the packet queues.  If there is data, return true.
-  //if (ptpd_net_queue_check(&net_path->eventQ) || ptpd_net_queue_check(&net_path->generalQ)) return 1;
+   /* Wait for any event within the socket set. */
+  int op_result = 0;
+  op_result = FreeRTOS_select( xFD_Set, 1000 );
+        if( op_result != 0 )
+        {
+            /* The return value should never be zero because FreeRTOS_select() was called
+            with an indefinite delay (assuming INCLUDE_vTaskSuspend is set to 1).
+            Now check each socket which belongs to the set if it had an event */
+          if( FreeRTOS_FD_ISSET ( eventSock, xFD_Set ) )
+            {
+              return 1;
+          }else if( FreeRTOS_FD_ISSET ( generalSock, xFD_Set ) )
+          {
+            return 1;
+          }
 
-  //return 0;
+        }
+    return 0;
 }
 
 // Delete all waiting packets in event queue.
 void ptpd_net_empty_event_queue(NetPath *net_path)
 {
-  xQueueReset(net_path->eventQ);
-  //ptpd_net_queue_empty(&net_path->eventQ);
+  return;//if (event_queue != NULL) xQueueReset(event_queue);
+  //ptp)d_net_queue_empty(&net_path->eventQ);
 }
 
-// Receive the next buffer from the given queue.
-static ssize_t ptpd_net_recv(octet_t *buf, TimeInternal *time, QueueHandle_t queue)
-{
-  int i;
-  int j;
-  uint16_t length;
-  packet_buffer_t *p;
-  xQueueReceive(queue, p, portMAX_DELAY);
-
-  // Get the next buffer from the queue.
-  xQueueReceive(queue, p, portMAX_DELAY);
-
-  // Get the timestamp of the packet.
-  if (time != NULL)
-  {
-    ptptime_t ts_time = p->timestamp;
-    time->seconds = ts_time.tv_sec;
-    time->nanoseconds = ts_time.tv_nsec;
-  }
-
-  // Get the length of the buffer to copy.
-  length = p->length;
-
-  // Copy the pbuf payload into the buffer.
-  memcpy(buf, p->buffer, p->length);
-  
-  return length;
-}
 
 ssize_t ptpd_net_recv_event(NetPath *net_path, octet_t *buf, TimeInternal *time)
 {
-  
-  return ptpd_net_recv(buf, time, &net_path->eventQ);
-  /*// get element from event rx queue
-  xQueueReceive(net_path->eventQ, buf, portMAX_DELAY);
-  // get rx_timestamp
-  if (time !=NULL){
-    ptptime_t ts_time = ethptp_get_last_rx_ts();
-    time->seconds = ts_time.tv_sec;
-    time->nanoseconds = ts_time.tv_nsec;
-  }*/
-
+  int op_result = 0;
+  struct freertos_sockaddr xSender;
+  uint32_t xSenderSize = sizeof(xSender);
+  if( FreeRTOS_FD_ISSET ( eventSock, xFD_Set ) )
+  {
+    /* Read from the socket. */
+    op_result = FreeRTOS_recvfrom(eventSock,
+             buf,
+             PACKET_SIZE,
+             0,
+             &xSender,
+             &xSenderSize);
+  if(op_result >0){
+    ptptime_t rxts = ethptp_get_last_rx_ts();
+    time->seconds = rxts.tv_sec;
+    time->nanoseconds = rxts.tv_nsec;
+    return op_result;
+  }
+  /* Process the received data here. */
+  }
+  return 0;
 }
 
 ssize_t ptpd_net_recv_general(NetPath *net_path, octet_t *buf, TimeInternal *time)
 {
-  return ptpd_net_recv(buf, time, &net_path->generalQ);
+    int op_result = 0;
+  struct freertos_sockaddr xSender;
+  uint32_t xSenderSize = sizeof(xSender);
+  if( FreeRTOS_FD_ISSET ( generalSock, xFD_Set ) )
+  {
+    /* Read from the socket. */
+    op_result = FreeRTOS_recvfrom(generalSock,
+             buf,
+             PACKET_SIZE,
+             0,
+             &xSender,
+             &xSenderSize);
+  if(op_result >0){
+    ptptime_t rxts = ethptp_get_last_rx_ts();
+    time->seconds = rxts.tv_sec;
+    time->nanoseconds = rxts.tv_nsec;
+    return op_result;
+  }
+  /* Process the received data here. */
+  }
+  return 0;
 }
 
 static ssize_t ptpd_net_send(const octet_t *buf, int16_t  length, TimeInternal *time, Socket_t sock, int32_t dest_addr, uint16_t dest_port)
@@ -245,7 +191,7 @@ static ssize_t ptpd_net_send(const octet_t *buf, int16_t  length, TimeInternal *
   //result = udp_sendto(pcb, p, (void *)addr, pcb->local_port);
   struct freertos_sockaddr dest;
   dest.sin_addr = dest_addr;
-  dest.sin_port = dest_port;
+  dest.sin_port = FreeRTOS_htons(dest_port);
   result = FreeRTOS_sendto(sock, buf, length, 0, &dest, sizeof(dest));
   //if (ERR_OK != result)
   //{
@@ -284,7 +230,8 @@ static ssize_t ptpd_net_send(const octet_t *buf, int16_t  length, TimeInternal *
 
 ssize_t ptpd_net_send_event(NetPath *net_path, const octet_t *buf, int16_t  length, TimeInternal *time)
 {
-  return ptpd_net_send(buf, length, time, net_path->eventSock, net_path->multicastAddr, PTP_EVENT_PORT );
+  uint32_t maddr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+  return ptpd_net_send(buf, length, time, eventSock, maddr, PTP_EVENT_PORT );
 }
 
 ssize_t ptpd_net_send_peer_event(NetPath *net_path, const octet_t *buf, int16_t  length, TimeInternal* time)
@@ -295,8 +242,10 @@ ssize_t ptpd_net_send_peer_event(NetPath *net_path, const octet_t *buf, int16_t 
 
 ssize_t ptpd_net_send_general(NetPath *net_path, const octet_t *buf, int16_t  length)
 {
+  uint32_t maddr = FreeRTOS_inet_addr(DEFAULT_PTP_DOMAIN_ADDRESS);
+  return ptpd_net_send(buf, length, NULL, generalSock, maddr, PTP_GENERAL_PORT );
   //return ptpd_net_send(buf, length, NULL, &net_path->multicastAddr, net_path->generalPcb);
-  return ptpd_net_send(buf, length, NULL, net_path->generalSock, net_path->multicastAddr, PTP_GENERAL_PORT );
+  //return 0;//return ptpd_net_send(buf, length, NULL, net_path->generalSock, net_path->multicastAddr, PTP_GENERAL_PORT );
 }
 
 ssize_t ptpd_net_send_peer_general(NetPath *net_path, const octet_t *buf, int16_t  length)

@@ -57,7 +57,8 @@ void ptpd_servo_init_clock(PtpClock *ptp_clock)
 
   // Empty the event queue.
   //ptpd_net_empty_event_queue(&ptp_clock->netPath);
-  xQueueReset(ptp_clock->netPath.eventQ);
+  //xQueueReset(ptp_clock->netPath.eventQ);
+  ptpd_net_empty_event_queue(&(ptp_clock->netPath));
 }
 
 static int32_t ptpd_servo_order(int32_t n)

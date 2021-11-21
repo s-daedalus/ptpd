@@ -52,7 +52,7 @@ void ptpd_timer_init(void)
     };*/
 
     // Mark the timer as not expired.
-    ptpd_timers_expired[i] = false;
+    ptpd_timers_expired[i] = true;
     // Create the timer.
     //ptpd_timer_id[i] = osTimerNew(ptpd_timer_callback, osTimerPeriodic, (void *) i, &timer_attrs);
     ptpd_timer_handle[i] = NULL;//xTimerCreate("ptp", )

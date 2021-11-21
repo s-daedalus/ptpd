@@ -4,6 +4,7 @@
 
 #if LWIP_PTPD
 
+
 static void handle(PtpClock*);
 static void handle_announce(PtpClock*, bool);
 static void handle_sync(PtpClock*, TimeInternal*, bool);
@@ -783,6 +784,7 @@ static void handle_follow_up(PtpClock *ptp_clock, bool is_from_self)
       // Now that we know the offset from the master, we can adjust our slave clock faster
       // or slower to bring it into alignment with the master clock.
       ptpd_servo_update_clock(ptp_clock);
+      ptpd_protocol_to_state(ptp_clock, PTP_SLAVE);
 
       issue_delay_req_timer_expired(ptp_clock);
       break;
@@ -1131,12 +1133,12 @@ static void issue_delay_req_timer_expired(PtpClock *ptp_clock)
       {
         break;
       }
-      if (ptpd_timer_expired(DELAYREQ_INTERVAL_TIMER))
-      {
-        ptpd_timer_start(DELAYREQ_INTERVAL_TIMER, ptpd_get_rand(pow2ms(ptp_clock->portDS.logMinDelayReqInterval + 1)));
-        DBGV("event DELAYREQ_INTERVAL_TIMEOUT_EXPIRES\n");
+      //if (ptpd_timer_expired(DELAYREQ_INTERVAL_TIMER))
+      //{
+//        ptpd_timer_start(DELAYREQ_INTERVAL_TIMER, ptpd_get_rand(pow2ms(ptp_clock->portDS.logMinDelayReqInterval + 1)));
+        //DBGV("event DELAYREQ_INTERVAL_TIMEOUT_EXPIRES\n");
         issue_delay_req(ptp_clock);
-      }
+      //}
       break;
 
     case P2P:

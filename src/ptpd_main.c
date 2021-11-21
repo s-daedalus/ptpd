@@ -2,6 +2,7 @@
 #include <string.h>
 #include "ptpd.h"
 #include "FreeRTOS.h"
+#include "FreeRTOS_IP.h"
 //#include "syslog.h"
 //#include "shell.h"
 
@@ -105,7 +106,7 @@ static bool ptpd_shell_ptpd(int argc, char **argv)
   return true;
 }
 
-static void ptpd_thread(void *arg)
+void ptpd_thread(void *arg)
 {
   // Initialize the main PTP datastructure.
   memset(&ptp_clock, 0, sizeof(ptp_clock));
@@ -114,6 +115,8 @@ static void ptpd_thread(void *arg)
   ptp_clock.rtOpts.slaveOnly = 1;
 
   // Initialize run-time options to default values.
+  memcpy(ptp_clock.portUuidField, FreeRTOS_GetMACAddress(), 6);
+  
   ptp_clock.rtOpts.announceInterval = DEFAULT_ANNOUNCE_INTERVAL;
   ptp_clock.rtOpts.syncInterval = DEFAULT_SYNC_INTERVAL;
   ptp_clock.rtOpts.clockQuality.clockAccuracy = DEFAULT_CLOCK_ACCURACY;
@@ -158,7 +161,7 @@ static void ptpd_thread(void *arg)
   // Loop forever.
   for (;;)
   {
-    void *msg;
+    //void *msg;
 
     // If network interface is not up, then hold everything.
     /*if (!network_is_up() || ip4_addr_isany_val(network_get_address()))
@@ -169,17 +172,18 @@ static void ptpd_thread(void *arg)
       // Network interface is now up so reinitialize.
       ptpd_protocol_to_state(&ptp_clock, PTP_INITIALIZING);
     }*/
-    
+
     // Process the current state.
-    do
-    {
+    //do
+    //{
       // ptpd_protocol_do_state() has a switch for the actions and events to be
       // checked for 'port_state'. The actions and events may or may not change
       // 'port_state' by calling ptpd_protocol_to_state(), but once they are done we loop around
       // again and perform the actions required for the new 'port_state'.
       ptpd_protocol_do_state(&ptp_clock);
-    }
-    while (ptpd_net_select(&ptp_clock.netPath, 0) > 0);
+      vTaskDelay(100);
+    //}
+    //while (ptpd_net_select(&ptp_clock.netPath, 0) > 0);
     
     // Wait up to 100ms for something to do, then do something anyway.
     //sys_arch_mbox_fetch(&ptp_alert_queue, &msg, 100);
@@ -189,7 +193,7 @@ static void ptpd_thread(void *arg)
 // PTPD initialization.
 void ptpd_init(bool slave_only)
 {
-  xTaskCreate(ptpd_thread, "ptp", 1024, NULL, ipconfigIP_TASK_PRIORITY-1, &pttp_task );  
+  xTaskCreate(ptpd_thread, "ptpd", 1024, NULL,ipconfigIP_TASK_PRIORITY - 1, &pttp_task );  
   /*sys_thread_t t;
 
   // Save the slave only flag.

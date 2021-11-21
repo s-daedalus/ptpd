@@ -79,6 +79,7 @@ extern "C" {
 // Application management.
 void ptpd_alert(void);
 void ptpd_init(bool slave_only);
+void ptpd_thread(void *arg);
 uint32_t ptpd_get_state(void);
 
 // Protocol engine.

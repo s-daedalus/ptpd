@@ -52,17 +52,19 @@ void ptpd_from_internal_time(const TimeInternal *internal, Timestamp *external)
   // in (internal). Note that offsets are also represented with TimeInternal
   // structure, and can be negative, but offset are never convert into Timestamp
   // so there is no problem here.
-  if ((internal->seconds & ~(1<<31)) || (internal->nanoseconds & ~(1<<31)))
+  uint32_t dbg1 = internal->seconds & ~(1<<31);
+  uint32_t dbg2 = internal->nanoseconds & ~(1<<31);
+  /*if ((internal->seconds & ~(1<<31)) || (internal->nanoseconds & ~(1<<31)))
   {
     DBG("PTPD: Negative value cannot be converted into timestamp \n");
     return;
   }
   else
-  {
+  {*/
     external->secondsField.lsb = internal->seconds;
     external->nanosecondsField = internal->nanoseconds;
     external->secondsField.msb = 0;
-  }
+  //}
 }
 
 // Convert Timestamp to TimeInternal structure (defined by the spec).
