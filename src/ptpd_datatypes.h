@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-//#include "cmsis_os2.h"
-//#include "lwip/api.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "FreeRTOS_Sockets.h"
@@ -67,17 +65,7 @@ typedef struct
 //  sys_mutex_t mutex;
 //} BufQueue;
 
-// Struct used to store network data.
-typedef struct
-{
-  int32_t unicastAddr;
-  int32_t multicastAddr;
-  int32_t peerMulticastAddr;
-  QueueHandle_t eventQ;
-  QueueHandle_t generalQ;
-  Socket_t eventSock;
-  Socket_t generalSock;
-} NetPath;
+
 
 // Define compiler specific symbols.
 #if defined (__GNUC__) && !defined (__ARMCC_VERSION)
@@ -456,7 +444,6 @@ typedef struct
   TimeInternal inboundLatency;
   TimeInternal outboundLatency;
 
-  NetPath netPath;
   Servo servo;
   int32_t events;
   enum8bit_t stats;

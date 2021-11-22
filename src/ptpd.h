@@ -116,16 +116,15 @@ void ptpd_msg_pack_peer_delay_resp(octet_t*, const MsgHeader*, const Timestamp*)
 void ptpd_msg_pack_peer_delay_resp_follow_up(octet_t*, const MsgHeader*, const Timestamp*);
 
 // Network functions.
-bool  ptpd_net_init(NetPath*, PtpClock*);
-bool  ptpd_net_shutdown(NetPath*);
-int32_t ptpd_net_select(NetPath*, const TimeInternal*);
-ssize_t ptpd_net_recv_event(NetPath*, octet_t*, TimeInternal*);
-ssize_t ptpd_net_recv_general(NetPath*, octet_t*, TimeInternal*);
-ssize_t ptpd_net_send_event(NetPath*, const octet_t*, int16_t, TimeInternal*);
-ssize_t ptpd_net_send_general(NetPath*, const octet_t*, int16_t);
-ssize_t ptpd_net_send_peer_general(NetPath*, const octet_t*, int16_t);
-ssize_t ptpd_net_send_peer_event(NetPath*, const octet_t*, int16_t, TimeInternal*);
-void ptpd_net_empty_event_queue(NetPath *netPath);
+bool  ptpd_net_init(PtpClock*);
+bool  ptpd_net_shutdown();
+int32_t ptpd_net_select(const TimeInternal*);
+ssize_t ptpd_net_recv_event(octet_t*, TimeInternal*);
+ssize_t ptpd_net_recv_general(octet_t*, TimeInternal*);
+ssize_t ptpd_net_send_event(const octet_t*, int16_t, TimeInternal*);
+ssize_t ptpd_net_send_general(const octet_t*, int16_t);
+ssize_t ptpd_net_send_peer_general(const octet_t*, int16_t);
+ssize_t ptpd_net_send_peer_event(const octet_t*, int16_t, TimeInternal*);
 
 // Precions time adjustment functions.
 void ptpd_servo_init_clock(PtpClock*);

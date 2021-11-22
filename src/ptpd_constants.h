@@ -253,8 +253,13 @@ enum
 #define PTP_GENERAL_PORT            320
 
 #define DEFAULT_PTP_DOMAIN_ADDRESS  "224.0.1.129"
+#define PTP_DOMAIN_ADDR_0  (224)
+#define PTP_DOMAIN_ADDR_1  (0)
+#define PTP_DOMAIN_ADDR_2  (1)
+#define PTP_DOMAIN_ADDR_3  (129)
 #define PEER_PTP_DOMAIN_ADDRESS     "224.0.0.107"
 
+#define PTPD_SELECT_BLOCK_TIME (0)
 #define MM_STARTING_BOUNDARY_HOPS   0x7fff
 
 // Must be a power of 2.

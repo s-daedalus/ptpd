@@ -211,7 +211,7 @@ static bool ptpd_protocol_do_init(PtpClock *ptp_clock)
   //ptpd_net_shutdown(&ptp_clock->netPath);
 
   // Initialize the network.
-  if (!ptpd_net_init(&ptp_clock->netPath, ptp_clock))
+  if (!ptpd_net_init(ptp_clock))
   {
     ERROR("ptpd_protocol_do_init: failed to initialize network\n");
     return false;
@@ -425,7 +425,7 @@ static void handle(PtpClock *ptp_clock)
 
   if (!ptp_clock->messageActivity)
   {
-    ret = ptpd_net_select(&ptp_clock->netPath, 0);
+    ret = ptpd_net_select(0);
     if (ret < 0)
     {
       ERROR("handle: failed to poll sockets\n");
@@ -442,7 +442,7 @@ static void handle(PtpClock *ptp_clock)
   DBGVV("handle: something\n");
 
   // Receive an event.
-  ptp_clock->msgIbufLength = ptpd_net_recv_event(&ptp_clock->netPath, ptp_clock->msgIbuf, &time);
+  ptp_clock->msgIbufLength = ptpd_net_recv_event(ptp_clock->msgIbuf, &time);
 
   // Local time is not UTC, we can calculate UTC on demand, otherwise UTC time is not used
   // time.seconds += ptp_clock->timePropertiesDS.currentUtcOffset;
@@ -457,7 +457,7 @@ static void handle(PtpClock *ptp_clock)
   else if (!ptp_clock->msgIbufLength)
   {
     // Receive a general packet.
-    ptp_clock->msgIbufLength = ptpd_net_recv_general(&ptp_clock->netPath, ptp_clock->msgIbuf, &time);
+    ptp_clock->msgIbufLength = ptpd_net_recv_general(ptp_clock->msgIbuf, &time);
     DBGV("handle: ptpd_net_recv_general returned %d\n", ptp_clock->msgIbufLength);
     if (ptp_clock->msgIbufLength < 0)
     {
@@ -1161,7 +1161,7 @@ static void issue_announce(PtpClock *ptp_clock)
 {
   ptpd_msg_pack_announce(ptp_clock, ptp_clock->msgObuf);
 
-  if (!ptpd_net_send_general(&ptp_clock->netPath, ptp_clock->msgObuf, ANNOUNCE_LENGTH))
+  if (!ptpd_net_send_general(ptp_clock->msgObuf, ANNOUNCE_LENGTH))
   {
     ERROR("issue_announce: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1185,7 +1185,7 @@ static void issue_sync(PtpClock *ptp_clock)
   ptpd_from_internal_time(&internal_time, &origin_timestamp);
   ptpd_msg_pack_sync(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);
 
-  if (!ptpd_net_send_event(&ptp_clock->netPath, ptp_clock->msgObuf, SYNC_LENGTH, &internal_time))
+  if (!ptpd_net_send_event(ptp_clock->msgObuf, SYNC_LENGTH, &internal_time))
   {
     ERROR("issue_sync: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1212,7 +1212,7 @@ static void issue_follow_up(PtpClock *ptp_clock, const TimeInternal *time)
   ptpd_from_internal_time(time, &precise_origin_timestamp);
   ptpd_msg_pack_follow_up(ptp_clock, ptp_clock->msgObuf, &precise_origin_timestamp);
 
-  if (!ptpd_net_send_general(&ptp_clock->netPath, ptp_clock->msgObuf, FOLLOW_UP_LENGTH))
+  if (!ptpd_net_send_general( ptp_clock->msgObuf, FOLLOW_UP_LENGTH))
   {
     ERROR("issue_follow_up: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1235,7 +1235,7 @@ static void issue_delay_req(PtpClock *ptp_clock)
 
   ptpd_msg_pack_delay_req(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);
 
-  if (!ptpd_net_send_event(&ptp_clock->netPath, ptp_clock->msgObuf, DELAY_REQ_LENGTH, &internal_time))
+  if (!ptpd_net_send_event(ptp_clock->msgObuf, DELAY_REQ_LENGTH, &internal_time))
   {
     ERROR("issue_delay_req: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1269,7 +1269,7 @@ static void issue_peer_delay_req(PtpClock *ptp_clock)
 
   ptpd_msg_pack_peer_delay_req(ptp_clock, ptp_clock->msgObuf, &origin_timestamp);
 
-  if (!ptpd_net_send_peer_event(&ptp_clock->netPath, ptp_clock->msgObuf, PDELAY_REQ_LENGTH, &internal_time))
+  if (!ptpd_net_send_peer_event(ptp_clock->msgObuf, PDELAY_REQ_LENGTH, &internal_time))
   {
     ERROR("issue_peer_delay_req: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1296,7 +1296,7 @@ static void issue_peer_delay_resp(PtpClock *ptp_clock, TimeInternal *time, const
   ptpd_from_internal_time(time, &request_receipt_timestamp);
   ptpd_msg_pack_peer_delay_resp(ptp_clock->msgObuf, delay_req_header, &request_receipt_timestamp);
 
-  if (!ptpd_net_send_peer_event(&ptp_clock->netPath, ptp_clock->msgObuf, PDELAY_RESP_LENGTH, time))
+  if (!ptpd_net_send_peer_event(ptp_clock->msgObuf, PDELAY_RESP_LENGTH, time))
   {
     ERROR("issue_peer_delay_resp: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1322,7 +1322,7 @@ static void issue_delay_resp(PtpClock *ptp_clock, const TimeInternal *time, cons
   ptpd_from_internal_time(time, &request_receipt_timestamp);
   ptpd_msg_pack_delay_resp(ptp_clock, ptp_clock->msgObuf, delayReqHeader, &request_receipt_timestamp);
 
-  if (!ptpd_net_send_general(&ptp_clock->netPath, ptp_clock->msgObuf, PDELAY_RESP_LENGTH))
+  if (!ptpd_net_send_general(ptp_clock->msgObuf, PDELAY_RESP_LENGTH))
   {
     ERROR("issue_delay_resp: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
@@ -1340,7 +1340,7 @@ static void issue_peer_delay_resp_follow_up(PtpClock *ptp_clock, const TimeInter
   ptpd_from_internal_time(time, &response_origin_timestamp);
   ptpd_msg_pack_peer_delay_resp_follow_up(ptp_clock->msgObuf, delay_req_header, &response_origin_timestamp);
 
-  if (!ptpd_net_send_peer_general(&ptp_clock->netPath, ptp_clock->msgObuf, PDELAY_RESP_FOLLOW_UP_LENGTH))
+  if (!ptpd_net_send_peer_general(ptp_clock->msgObuf, PDELAY_RESP_FOLLOW_UP_LENGTH))
   {
     ERROR("issue_peer_delay_resp_follow_up: can't sent\n");
     ptpd_protocol_to_state(ptp_clock, PTP_FAULTY);
