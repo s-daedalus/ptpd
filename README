@@ -1,4 +1,6 @@
 README for PTPd Version 2
+- Credit -
+this port is currently based on Mike Thompsons LWIP port of PTPd: https://github.com/mpthompson/stm32_ptpd
 
 - Introduction -
 
