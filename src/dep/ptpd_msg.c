@@ -5,7 +5,7 @@
 #define htons(x) FreeRTOS_htons(x)
 #define htonl(x) FreeRTOS_htonl(x)
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 // Unpack header message.
 void ptpd_msg_unpack_header(const octet_t *buf, MsgHeader *header)
@@ -294,4 +294,4 @@ void ptpd_msg_unpack_peer_delay_resp_follow_up(const octet_t *buf, MsgPDelayResp
   resp_follow_up->requestingPortIdentity.portNumber = flip16(*(int16_t*)(buf + 52));
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

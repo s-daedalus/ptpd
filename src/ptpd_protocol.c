@@ -2,7 +2,7 @@
 #include "stm32f7xx_hal_ptp.h"
 //#include "syslog.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 
 static void handle(PtpClock*);
@@ -1351,4 +1351,4 @@ static void issue_peer_delay_resp_follow_up(PtpClock *ptp_clock, const TimeInter
   }
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

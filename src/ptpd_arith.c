@@ -1,6 +1,6 @@
 #include "ptpd.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 // Normalize the time making sure there are never more
 // than a billion nanoseconds represented.
@@ -129,4 +129,4 @@ int32_t ptpd_floor_log2(uint32_t n)
   return pos;
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

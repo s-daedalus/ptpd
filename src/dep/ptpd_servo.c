@@ -5,7 +5,7 @@
 //#include "systime.h"
 //#include "syslog.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 void ptpd_servo_init_clock(PtpClock *ptp_clock)
 {
@@ -421,4 +421,4 @@ void ptpd_servo_update_clock(PtpClock *ptp_clock)
   DBG("PTPD: ptpd_servo_update_clock: observed drift: %d\n", ptp_clock->observedDrift);
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

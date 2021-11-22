@@ -1,7 +1,7 @@
 #include "ptpd.h"
 #include "cmsis_os2.h"
 #include "FreeRTOS.h"
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 typedef uint16_t TimerID_t;
 // Static array of PTPD timers.
@@ -121,4 +121,4 @@ bool ptpd_timer_expired(int32_t index)
   return true;
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

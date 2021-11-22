@@ -6,7 +6,7 @@
 //#include "syslog.h"
 //#include "shell.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 // Statically allocated run-time configuration data.
 static bool ptpd_slave_only = true;
@@ -238,4 +238,4 @@ uint32_t ptpd_get_state(void)
   return (uint32_t) ptp_clock.portDS.portState;
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD

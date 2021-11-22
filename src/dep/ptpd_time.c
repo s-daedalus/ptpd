@@ -4,7 +4,7 @@
 #include "ethptp.h"
 #include "FreeRTOS_IP.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 uint32_t ptpd_get_rand(uint32_t rand_max)
 {
@@ -87,5 +87,5 @@ bool ptpd_adj_freq(int32_t adj)
 }
 #endif
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD
 

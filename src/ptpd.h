@@ -14,7 +14,7 @@
 //#include "network.h"
 //#include "outputf.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 /* #define PTPD_DBGVV */
 /* #define PTPD_DBGV */
@@ -187,6 +187,6 @@ __STATIC_INLINE int32_t min(int32_t a, int32_t b)
 }
 #endif
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD
 
 #endif // __PTPD_H__

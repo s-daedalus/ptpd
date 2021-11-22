@@ -1,7 +1,7 @@
 #include <string.h>
 #include "ptpd.h"
 
-#if LWIP_PTPD
+#if FREERTOS_PTPD
 
 // Convert EUI48 format to EUI64.
 static void eui48_to_eui64(const octet_t * eui48, octet_t * eui64)
@@ -422,30 +422,30 @@ static uint8_t ptpd_state_decision(MsgHeader *header, MsgAnnounce *announce, Ptp
 // The best master clock (BMC) algorithm performs a distributed selection of the
 // best candidate clock based on the following clock properties:
 //
-//  * Identifier – A universally unique numeric identifier for the clock. This is
+//  * Identifier ï¿½ A universally unique numeric identifier for the clock. This is
 //    typically constructed based on a device's MAC address.
-//  * Quality – Both versions of IEEE 1588 attempt to quantify clock quality based
+//  * Quality ï¿½ Both versions of IEEE 1588 attempt to quantify clock quality based
 //    on expected timing deviation, technology used to implement the clock or location
 //    in a stratum schema, although only V1 (IEEE 1588-2002) knows a data field stratum.
 //    PTP V2 (IEEE 1588-2008) defines the overall quality of a clock by using the data
 //    fields clockAccuracy and clockClass.
-//  * Priority – An administratively assigned precedence hint used by the BMC to help
+//  * Priority ï¿½ An administratively assigned precedence hint used by the BMC to help
 //    select a grandmaster for the PTP domain. IEEE 1588-2002 used a single boolean
 //    variable to indicate precedence. IEEE 1588-2008 features two 8-bit priority fields.
-//  * Variance – A clock's estimate of its stability based on observation of its
+//  * Variance ï¿½ A clock's estimate of its stability based on observation of its
 //    performance against the PTP reference. IEEE 1588-2008 uses a hierarchical selection
 //    algorithm based on the following properties, in the indicated order:
 //
-//    1. Priority 1 – the user can assign a specific static-designed priority to each clock,
+//    1. Priority 1 ï¿½ the user can assign a specific static-designed priority to each clock,
 //       preemptively defining a priority among them. Smaller numeric values indicate
 //       higher priority.
-//    2. Class – each clock is a member of a given class, each class getting its own 
+//    2. Class ï¿½ each clock is a member of a given class, each class getting its own 
 //       priority.
-//    3. Accuracy – precision between clock and UTC, in nanoseconds (ns)
-//    4. Variance – variability of the clock
-//    5. Priority 2 – final-defined priority, defining backup order in case the other 
+//    3. Accuracy ï¿½ precision between clock and UTC, in nanoseconds (ns)
+//    4. Variance ï¿½ variability of the clock
+//    5. Priority 2 ï¿½ final-defined priority, defining backup order in case the other 
 //       criteria were not sufficient. Smaller numeric values indicate higher priority.
-//    6. Unique identifier – MAC address-based selection is used as a tiebreaker when
+//    6. Unique identifier ï¿½ MAC address-based selection is used as a tiebreaker when
 //       all other properties are equal.
 //
 
@@ -476,4 +476,4 @@ uint8_t ptpd_bmc(PtpClock *ptp_clock)
                              ptp_clock);
 }
 
-#endif // LWIP_PTPD
+#endif // FREERTOS_PTPD
